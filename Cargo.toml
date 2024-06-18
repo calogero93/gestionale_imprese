@@ -20,3 +20,4 @@ anyhow = "1.0.71"
 async-redis-session = { git = "https://github.com/ttys3/async-redis-session.git", rev = "25fe06c"}
 redis = { version = "0.23.0", features = ["tokio-comp", "json"] }
 deadpool-diesel = { version = "0.4.1", features = ["postgres"] }
+diesel-dynamic-schema = "0.2.2"

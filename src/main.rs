@@ -2,11 +2,12 @@ use async_redis_session::RedisSessionStore;
 use axum::{
     extract::{Json, Query, State}, response::{IntoResponse, Response}, routing::{get, post}, Router
 };
-use diesel::prelude::*;
+use diesel::{prelude::*, sql_query, sql_types::{Nullable, Text}};
 use diesel::r2d2::{self, ConnectionManager};
 use hyper::StatusCode;
 use redis::Client;
-use schema::employees;
+use schema::utentis::impresa_id;
+use subschemas::employees;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -19,6 +20,7 @@ mod schema;
 mod models;
 mod migration;
 mod utils;
+mod subschemas;
 
 type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
@@ -37,6 +39,7 @@ struct UserRequest {
 struct LoginRequest {
     username: String,
     password: String,
+    impresa_id: i32
 }
 
 #[derive(Serialize)]
@@ -59,6 +62,11 @@ struct GetUserDataQuery {
 }
 
 #[derive(Deserialize)]
+struct GetEmployeeDataQuery {
+    id: i32,
+}
+
+#[derive(Deserialize)]
 struct UpdateEmployeeRequest {
     id: i32,
     nome: Option<String>,
@@ -66,12 +74,17 @@ struct UpdateEmployeeRequest {
     ruolo: Option<String>,
 }
 
-#[derive(Deserialize, AsChangeset)]
+#[derive(Deserialize, AsChangeset, Debug)]
 #[diesel(table_name = employees)]
 struct UpdateEmployeeFields {
     nome: Option<String>,
     cognome: Option<String>,
     ruolo: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RemoveEmployeeQuery {
+    id: i32,
 }
 
 pub struct InternalServerError(pub anyhow::Error);
@@ -109,7 +122,7 @@ async fn register(
         password: payload.password.clone(),
     };
 
-    utils::set_search_path(&mut conn, "public").map_err(|e| format!("Failed to set search path: {}", e))?;
+    //utils::set_search_path(&mut conn, "public").map_err(|e| format!("Failed to set search path: {}", e))?;
 
     let user_id: i32 = diesel::insert_into(users::table)
         .values(&new_user)
@@ -127,7 +140,7 @@ async fn register(
     task::block_in_place(|| migration::run(&schema_name, &mut conn))
         .map_err(|e| format!("Failed to run migrations: {}", e))?;
 
-    utils::set_search_path(&mut conn, &schema_name).map_err(|e| format!("Failed to set search path: {}", e))?;
+    //utils::set_search_path(&mut conn, &schema_name).map_err(|e| format!("Failed to set search path: {}", e))?;
 
     diesel::sql_query(format!(
         "CREATE TABLE {}.employees (
@@ -150,7 +163,7 @@ async fn get_user_data(
     session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetUserDataQuery>,
-) -> Result<Json<Vec<models::Employee>>, String> {
+) -> Result<Json<Vec<models::Dipendenti>>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
     let user_id = match session.get::<String>("user_id"){
@@ -161,29 +174,30 @@ async fn get_user_data(
     println!("{:?}", &session.get::<String>("user_id"));
 
     let schema_name = format!("user_{}", user_id);
-    utils::set_search_path(&mut conn, &schema_name).map_err(|e| format!("Failed to set search path: {}", e))?;
+    let table_name = format!("{}.employees", schema_name);
 
-    use schema::employees::dsl::*;
+    let mut query = format!("SELECT * FROM {}", table_name);
+    let mut conditions = vec![];
 
-    let mut query_builder = employees.into_boxed();
-
-    if let Some(nome_filter) = params.nome {
-        query_builder = query_builder.filter(nome.like(format!("%{}%", nome_filter)));
+    if let Some(nome) = &params.nome {
+        conditions.push(format!("nome LIKE '%{}%'", nome));
+    }
+    if let Some(cognome) = &params.cognome {
+        conditions.push(format!("cognome LIKE '%{}%'", cognome));
+    }
+    if let Some(ruolo) = &params.ruolo {
+        conditions.push(format!("ruolo LIKE '%{}%'", ruolo));
     }
 
-    if let Some(cognome_filter) = params.cognome {
-        query_builder = query_builder.filter(cognome.like(format!("%{}%", cognome_filter)));
+    if !conditions.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
     }
 
-    if let Some(ruolo_filter) = params.ruolo {
-        query_builder = query_builder.filter(ruolo.like(format!("%{}%", ruolo_filter)));
-    }
 
-    let results = query_builder
-    .load::<models::Employee>(&mut conn)
-    .map_err(|e| {
-        format!("Failed to load employee: {}", e)
-    })?;
+    let results = sql_query(query)
+        .load::<models::Dipendenti>(&mut conn)
+        .map_err(|e| format!("Failed to execute query: {}", e))?;
 
 
     Ok(Json(results))
@@ -195,16 +209,17 @@ async fn login(
     payload: Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
-    use schema::users::dsl::*;
+    use schema::utentis::dsl::*;
 
     println!("{} {}", &payload.username, &payload.password);
 
-    utils::set_search_path(&mut conn, "public").map_err(|e| format!("Failed to set search path: {}", e))?;
+   // utils::set_search_path(&mut conn, "public").map_err(|e| format!("Failed to set search path: {}", e))?;
 
-    let user = users
+    let user = utentis
         .filter(username.eq(&payload.username))
         .filter(password.eq(&payload.password))
-        .first::<models::User>(&mut conn)
+        .filter(impresa_id.eq(&payload.impresa_id))
+        .first::<models::Utenti>(&mut conn)
         .map_err(|_| "Invalid username or password".to_string())?;
 
     session.insert("user_id", user.id.to_string()).unwrap();
@@ -226,16 +241,27 @@ async fn add_employee(
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
     let schema_name = format!("user_{}", user_id);
-    utils::set_search_path(&mut conn, &schema_name).map_err(|e| format!("Failed to set search path: {}", e))?;
+    let table_name = format!("{}.employees", schema_name);
 
-    let new_dipendente = models::NewEmployee {
+    // Costruzione della query SQL con parametri
+    let query = format!(
+        r#"INSERT INTO "{}"."employees" (nome, cognome, ruolo) VALUES ($1, $2, $3)"#,
+        schema_name
+    );
+    //utils::set_search_path(&mut conn, &schema_name).map_err(|e| format!("Failed to set search path: {}", e))?;
+
+    /*let new_dipendente = models::NewEmployee {
         nome: payload.nome,
         cognome: payload.cognome,
         ruolo: payload.ruolo,
-    };
+    };*/
 
-    diesel::insert_into(schema::employees::table)
-        .values(&new_dipendente)
+    //let emp = table(format!("{}.employees", schema_name))
+
+    diesel::sql_query(query)
+        .bind::<Text, _>(payload.nome.clone())
+        .bind::<Text, _>(payload.cognome.clone())
+        .bind::<Text, _>(payload.ruolo.clone())
         .execute(&mut conn)
         .map_err(|e| format!("Failed to insert dipendente: {}", e))?;
 
@@ -248,20 +274,20 @@ async fn update_employee(
     State(pool): State<Arc<DbPool>>,
     Json(payload): Json<UpdateEmployeeRequest>,
 ) -> Result<impl IntoResponse, String> {
-    let user_id: i32 = session.get("user_id").ok_or("No session found".to_string())?;
+    let user_id = match session.get::<String>("user_id"){
+        Some(user_id) => user_id,
+        None => return Err("Unauthorized".to_string())
+    };
 
     let mut conn = pool.get().map_err(|e| {
         format!("Failed to get DB connection: {}", e)
     })?;
 
-    let schema_name = format!("user_{}", user_id);
-    utils::set_search_path(&mut conn, &schema_name).map_err(|e| {
-        format!("Failed to set search path: {}", e)
-    })?;
+    use subschemas::employees::dsl::*;
 
-    use schema::employees::dsl::*;
+    print!("id:{}", payload.id);
 
-    let target = employees.filter(id.eq(payload.id));
+    /*let target = employees.filter(id.eq(payload.id));
 
     let mut update_request = UpdateEmployeeFields {
         nome: None,
@@ -282,17 +308,116 @@ async fn update_employee(
         update_request.ruolo = Some(new_ruolo);
     }
 
+    println!("{:?}", update_request);
+
     
     diesel::update(target)
         .set(update_request)
         .execute(&mut conn).map_err(|e| {
             format!("Failed to update dipendente: {}", e)
-        })?;
+        })?;*/
+
+    let schema_name = format!("user_{}", user_id);
+    let table_name = format!("{}.employees", schema_name);
+
+    let query = format!(
+        r#"UPDATE "{}"."employees" SET
+            nome = COALESCE($1, nome),
+            cognome = COALESCE($2, cognome),
+            ruolo = COALESCE($3, ruolo)
+            WHERE id = $4"#,
+        schema_name
+    );
+
+    // Esecuzione della query con parametri
+    diesel::sql_query(query)
+        .bind::<Nullable<Text>, _>(payload.nome.clone())
+        .bind::<Nullable<Text>, _>(payload.cognome.clone())
+        .bind::<Nullable<Text>, _>(payload.ruolo.clone())
+        .bind::<diesel::sql_types::Int4, _>(payload.id)
+        .execute(&mut conn)
+        .map_err(|e| format!("Failed to update dipendente: {}", e))?;
 
     Ok(Json("Employee updated successfully"))
 }
 
+async fn get_employee(
+    session: ReadableSession,
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetEmployeeDataQuery>,
+) -> Result<Json<Vec<models::Dipendenti>>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
+    let user_id = match session.get::<String>("user_id"){
+        Some(user_id) => user_id,
+        None => return Err("Unauthorized".to_string())
+    };
+
+    println!("{:?}", &session.get::<String>("user_id"));
+
+    /*let schema_name = format!("user_{}", user_id);
+    utils::set_search_path(&mut conn, &schema_name).map_err(|e| format!("Failed to set search path: {}", e))?;
+
+    use subschemas::employees::dsl::*;
+
+    let mut query_builder = employees.into_boxed();
+
+    query_builder = query_builder.filter(id.eq(params.id));
+    
+
+    let results = query_builder
+    .load::<models::Employee>(&mut conn)
+    .map_err(|e| {
+        format!("Failed to load employee: {}", e)
+    })?;*/
+
+    let schema_name = format!("user_{}", user_id);
+
+    let query = format!(
+        r#"SELECT id, nome, cognome, ruolo FROM "{}"."employees" WHERE id = $1"#,
+        schema_name
+    );
+
+    let results = sql_query(query)
+        .bind::<diesel::sql_types::Int4, _>(params.id)
+        .load::<models::Dipendenti>(&mut conn)
+        .map_err(|e| format!("Failed to execute query: {}", e))?;
+
+
+    Ok(Json(results))
+}
+
+async fn remove_employee(
+    session: ReadableSession,
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<RemoveEmployeeQuery>,
+) -> Result<impl IntoResponse, String> {
+    let user_id = match session.get::<String>("user_id") {
+        Some(user_id) => user_id,
+        None => return Err("Unauthorized".to_string()),
+    };
+
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    let schema_name = format!("user_{}", user_id);
+    let query = format!(r#"DELETE FROM "{}"."employees" WHERE id = $1"#, schema_name);
+
+    diesel::sql_query(query)
+        .bind::<diesel::sql_types::Integer, _>(params.id)
+        .execute(&mut conn)
+        .map_err(|e| format!("Failed to delete employee: {}", e))?;
+
+    Ok((StatusCode::OK, Json("Employee removed successfully")))
+}
+
+pub async fn session_check(
+    session: ReadableSession,
+) -> impl IntoResponse {
+    match <axum_sessions::async_session::Session as Clone>::clone(&session).validate() {
+        Some(_) => Json("".to_string()),
+        None => Json("Unauthorized".to_string())
+    }
+}
 
 
 #[tokio::main]
@@ -318,14 +443,17 @@ async fn main() {
         .with_same_site_policy(axum_sessions::SameSite::None);
 
     let app = Router::new()
+        .route("/check_session", get(session_check))
         .route("/register", post(register))
         .route("/get_user_data", get(get_user_data))
         .route("/login", post(login))
         .route("/add_employee", post(add_employee))
         .route("/update_employee", post(update_employee))
+        .route("/get_employee", get(get_employee))
+        .route("/remove_employee", post(remove_employee))
         .layer(session_layer)
         .with_state(pool.into());
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
 
     hyper::Server::bind(&addr)
         .serve(app.into_make_service())

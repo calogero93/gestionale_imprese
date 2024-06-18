@@ -609,6 +609,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "diesel-dynamic-schema"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71eda9b13a55533594231b0763c36bc21058ccb82ed17eaeb41b3cbb897c1bb1"
+dependencies = [
+ "diesel",
+]
+
+[[package]]
 name = "diesel_derives"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -824,6 +833,7 @@ dependencies = [
  "axum-sessions",
  "deadpool-diesel",
  "diesel",
+ "diesel-dynamic-schema",
  "dotenvy",
  "hyper",
  "redis",

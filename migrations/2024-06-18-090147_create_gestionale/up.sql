@@ -1,22 +1,56 @@
 -- Your SQL goes here
-CREATE TABLE utenti (
+-- Your SQL goes here
+
+CREATE TABLE impresa (
+    id SERIAL PRIMARY KEY,
+    ragion_sociale TEXT,
+    indirizzo TEXT NOT NULL,
+    targa TEXT NOT NULL,
+    partita_iva VARCHAR(255) NOT NULL,
+    proprieta TEXT NOT NULL,
+    data_dimissioni DATE NOT NULL,
+    rfid1 VARCHAR(50) NOT NULL,
+    rfid2 VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE qualifica (
+    id SERIAL PRIMARY KEY,
+    descrizione TEXT NOT NULL
+);
+
+CREATE TABLE mansione (
+    id SERIAL PRIMARY KEY,
+    descrizione TEXT NOT NULL
+);
+
+CREATE TABLE opera (
+    id SERIAL PRIMARY KEY,
+    descrizione TEXT NOT NULL
+);
+
+CREATE TABLE tipo_proprieta (
+    id SERIAL PRIMARY KEY,
+    descrizione TEXT NOT NULL
+);
+
+CREATE TABLE utente (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
     nome VARCHAR(255) NOT NULL,
     cognome VARCHAR(255) NOT NULL,
-    impresa VARCHAR(255) NOT NULL,
+    impresa_id INT REFERENCES imprese(id),
     utente VARCHAR(255) NOT NULL,
     autorizazzione BOOLEAN NOT NULL DEFAULT FALSE
-)
+);
 
-CREATE TABLE imprese_associate_utenti (
+CREATE TABLE imprese_associate_utente (
     id SERIAL PRIMARY KEY,
     utente_id INT REFERENCES utenti(id),
     impresa_id INT REFERENCES imprese(id)
-)
+);
 
-CREATE TABLE dipendenti (
+CREATE TABLE dipendente (
     id SERIAL PRIMARY KEY,
     nome VARCHAR(255) NOT NULL,
     cognome VARCHAR(255) NOT NULL,
@@ -30,9 +64,9 @@ CREATE TABLE dipendenti (
     data_dimissioni DATE NOT NULL,
     rfid1 VARCHAR(50) NOT NULL,
     rfid2 VARCHAR(50) NOT NULL
-)
+);
 
-CREATE TABLE mezzi (
+CREATE TABLE mezzo (
     id SERIAL PRIMARY KEY,
     descrizione TEXT ,
     modello TEXT NOT NULL,
@@ -42,57 +76,27 @@ CREATE TABLE mezzi (
     data_dimissioni DATE NOT NULL,
     rfid1 VARCHAR(50) NOT NULL,
     rfid2 VARCHAR(50) NOT NULL
-)
+);
 
-CREATE TABLE autovetture (
+CREATE TABLE autovettura (
     id SERIAL PRIMARY KEY,
     descrizione TEXT,
     modello TEXT NOT NULL,
     targa TEXT NOT NULL,
-    tipo_proprieta VINT REFERENCES tipi_proprieta(id),
+    tipo_proprieta INT REFERENCES tipi_proprieta(id),
     proprieta VARCHAR(255) NOT NULL,
     impresa_id INT REFERENCES imprese(id),
     data_dimissioni DATE NOT NULL,
     rfid1 VARCHAR(50) NOT NULL,
     rfid2 VARCHAR(50) NOT NULL
-)
+);
 
-CREATE TABLE imprese (
+
+CREATE TABLE impresa_collegata (
     id SERIAL PRIMARY KEY,
-    ragion_sociale TEXT,
-    indirizzo TEXT NOT NULL,
-    targa TEXT NOT NULL,
-    partita_iva VARCHAR(255) NOT NULL,
-    proprieta TEXT NOT NULL,
     impresa_id INT REFERENCES imprese(id),
-    data_dimissioni DATE NOT NULL,
-    rfid1 VARCHAR(50) NOT NULL,
-    rfid2 VARCHAR(50) NOT NULL
-)
-
-
-CREATE TABLE imprese_collegate (
-    id SERIAL PRIMARY KEY,
-    impresa_id INT REFERENCES imprese(id)
     ruolo_impresa VARCHAR(50) NOT NULL
-)
+);
 
-CREATE TABLE qualifiche (
-    id SERIAL PRIMARY KEY,
-    descrizione TEXT NOT NULL
-)
 
-CREATE TABLE mansioni (
-    id SERIAL PRIMARY KEY,
-    descrizione TEXT NOT NULL
-)
 
-CREATE TABLE opere (
-    id SERIAL PRIMARY KEY,
-    descrizione TEXT NOT NULL
-)
-
-CREATE TABLE tipi_proprieta (
-    id SERIAL PRIMARY KEY,
-    descrizione TEXT NOT NULL
-)
