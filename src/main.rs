@@ -2,90 +2,33 @@ use async_redis_session::RedisSessionStore;
 use axum::{
     extract::{Json, Query, State}, response::{IntoResponse, Response}, routing::{get, post}, Router
 };
-use diesel::{prelude::*, sql_query, sql_types::{Nullable, Text}};
+use diesel::{prelude::*, sql_query, sql_types::Text};
 use diesel::r2d2::{self, ConnectionManager};
 use hyper::StatusCode;
 use redis::Client;
-use schema::utentis::impresa_id;
-use subschemas::employees;
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use utils::{get_imprese_associate_utenti, get_utente, hashing};
+use std::{hash::{DefaultHasher, Hasher}, net::SocketAddr};
 use std::sync::Arc;
 use tokio::task;
 use dotenvy::dotenv;
 use std::env;
 use axum_sessions::{extractors::{ReadableSession, WritableSession}, SessionLayer};
+use std::hash::Hash;
+use request_states::*;
+use response_states::*;
+use handlers::{add_handlers::*, get_handlers::*, modify_handlers::*, remove_handlers::*};
 
 mod schema;
 mod models;
 mod migration;
 mod utils;
-mod subschemas;
+mod request_states;
+mod response_states;
+mod handlers;
+mod query_states;
+mod remove_state;
 
 type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
-
-#[derive(Deserialize)]
-struct RegisterRequest {
-    username: String,
-    password: String,
-}
-
-#[derive(Deserialize)]
-struct UserRequest {
-    user_id: i32,
-}
-
-#[derive(Deserialize)]
-struct LoginRequest {
-    username: String,
-    password: String,
-    impresa_id: i32
-}
-
-#[derive(Serialize)]
-struct LoginResponse {
-    message: String,
-}
-
-#[derive(Deserialize)]
-struct AddEmployeeRequest {
-    nome: String,
-    cognome: String,
-    ruolo: String,
-}
-
-#[derive(Deserialize)]
-struct GetUserDataQuery {
-    nome: Option<String>,
-    cognome: Option<String>,
-    ruolo: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct GetEmployeeDataQuery {
-    id: i32,
-}
-
-#[derive(Deserialize)]
-struct UpdateEmployeeRequest {
-    id: i32,
-    nome: Option<String>,
-    cognome: Option<String>,
-    ruolo: Option<String>,
-}
-
-#[derive(Deserialize, AsChangeset, Debug)]
-#[diesel(table_name = employees)]
-struct UpdateEmployeeFields {
-    nome: Option<String>,
-    cognome: Option<String>,
-    ruolo: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct RemoveEmployeeQuery {
-    id: i32,
-}
 
 pub struct InternalServerError(pub anyhow::Error);
 
@@ -115,18 +58,25 @@ async fn register(
 ) -> anyhow::Result<impl IntoResponse, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
-    use schema::users;
+    use schema::utentis;
 
-    let new_user = models::NewUser {
+    let new_user = models::NewUtente {
         username: payload.username.clone(),
         password: payload.password.clone(),
+        nome: todo!(),
+        cognome: todo!(),
+        impresa_id: todo!(),
+        utente: todo!(),
+        autorizazzione: todo!(),
+        primo_login: todo!(),
+        super_utente: todo!(),
     };
 
     //utils::set_search_path(&mut conn, "public").map_err(|e| format!("Failed to set search path: {}", e))?;
 
-    let user_id: i32 = diesel::insert_into(users::table)
+    let user_id: i32 = diesel::insert_into(utentis::table)
         .values(&new_user)
-        .returning(users::id)
+        .returning(utentis::id)
         .get_result(&mut conn)
         .map_err(|e| format!("Failed to insert user: {}", e))?;
 
@@ -158,6 +108,8 @@ async fn register(
     Ok(Json(format!("User {} registered with schema {}", payload.username, schema_name)).into_response())
     
 }
+
+
 
 async fn get_user_data(
     session: ReadableSession,
@@ -218,11 +170,20 @@ async fn login(
     let user = utentis
         .filter(username.eq(&payload.username))
         .filter(password.eq(&payload.password))
-        .filter(impresa_id.eq(&payload.impresa_id))
         .first::<models::Utenti>(&mut conn)
-        .map_err(|_| "Invalid username or password".to_string())?;
+        .map_err(|_| "Il nome utente o la password sono errati".to_string())?;
+
+    if user.primo_login.unwrap() {
+        return Ok(Json(LoginResponse { message: "primo_login".to_string() }));
+    }
 
     session.insert("user_id", user.id.to_string()).unwrap();
+
+    let imprese_assiociate = get_imprese_associate_utenti(&mut conn, user.id)?;
+ 
+    session.insert("impresa_id", imprese_assiociate).unwrap();
+
+    session.insert("super_utente", user.super_utente).unwrap();
 
     
     Ok(Json(LoginResponse { message: "Login successful".to_string() }))
@@ -269,7 +230,7 @@ async fn add_employee(
 }
 
 
-async fn update_employee(
+/*async fn update_employee(
     session: WritableSession,
     State(pool): State<Arc<DbPool>>,
     Json(payload): Json<UpdateEmployeeRequest>,
@@ -339,7 +300,7 @@ async fn update_employee(
         .map_err(|e| format!("Failed to update dipendente: {}", e))?;
 
     Ok(Json("Employee updated successfully"))
-}
+}*/
 
 async fn get_employee(
     session: ReadableSession,
@@ -419,6 +380,46 @@ pub async fn session_check(
     }
 }
 
+async fn change_password(
+    session: ReadableSession,
+    Json(payload): Json<ChangePasswordRequest>,
+    State(pool): State<Arc<DbPool>>,
+    token: String,
+) -> Result<Json<String>, String> {
+    use crate::schema::utentis::dsl::*;
+
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    let user_id = match session.get::<String>("user_id") {
+        Some(user_id) => user_id,
+        None => return Err("Unauthorized".to_string()),
+    };
+
+    let user_id: i32 = user_id.parse().unwrap();
+
+    let user = utentis
+        .filter(id.eq(user_id))
+        .first::<models::Utenti>(&mut conn)
+        .map_err(|_| "Utente non trovato".to_string())?;
+
+    if hashing(&payload.old_password) == hashing(&user.password) {
+        if &payload.new_password == &payload.confirm_password {
+            let new_hashed_password = hashing(&payload.new_password);
+            diesel::update(utentis.filter(id.eq(user.id)))
+                .set(password.eq(new_hashed_password.to_string()))
+                .execute(&mut conn)
+                .map_err(|_| "Errore nell'aggiornamento della password".to_string())?;
+            return Ok(Json("Password Cambiata con successo".to_string()));
+        } else {
+            return Ok(Json("Le password non coincidono".to_string()));
+        }   
+
+    } else {
+        Err("La vecchia password non è corretta".to_string())
+    }
+}
+
+
 
 #[tokio::main]
 async fn main() {
@@ -442,15 +443,52 @@ async fn main() {
         .with_persistence_policy(axum_sessions::PersistencePolicy::ChangedOnly)
         .with_same_site_policy(axum_sessions::SameSite::None);
 
-    let app = Router::new()
+        let app = Router::new()
         .route("/check_session", get(session_check))
         .route("/register", post(register))
         .route("/get_user_data", get(get_user_data))
         .route("/login", post(login))
         .route("/add_employee", post(add_employee))
-        .route("/update_employee", post(update_employee))
+        //.route("/update_employee", post(update_employee))
         .route("/get_employee", get(get_employee))
         .route("/remove_employee", post(remove_employee))
+        .route("/add_utente", post(add_user.clone()))
+        .route("/update_utente", post(update_utenti))
+        .route("/get_utenti", get(get_utenti))
+        .route("/remove_utente", post(remove_utente))
+        .route("/add_dipendente", post(add_dipendenti))
+        .route("/update_dipendente", post(update_dipendenti))
+        .route("/get_dipendenti", get(get_dipendenti))
+        .route("/remove_dipendente", post(remove_dipendente))
+        .route("/add_mezzo", post(add_mezzi))
+        .route("/update_mezzo", post(update_mezzi))
+        .route("/get_mezzi", get(get_mezzi))
+        .route("/remove_mezzo", post(remove_mezzo))
+        .route("/add_autovettura", post(add_autovetture))
+        .route("/update_autovettura", post(update_autovetture))
+        .route("/get_autovetture", get(get_autovetture))
+        .route("/remove_autovettura", post(remove_autovettura))
+        .route("/add_impresa", post(add_imprese))
+        .route("/update_impresa", post(update_imprese))
+        .route("/get_imprese", get(get_imprese))
+        .route("/remove_impresa", post(remove_impresa))
+        .route("/add_qualifica", post(add_qualifiche))
+        .route("/update_qualifica", post(update_qualifiche))
+        .route("/get_qualifiche", get(get_qualifiche))
+        .route("/get_qualifica", get(get_qualifica))
+        .route("/remove_qualifica", post(remove_qualifica))
+        .route("/add_mansione", post(add_mansioni))
+        .route("/update_mansione", post(update_mansioni))
+        .route("/get_mansioni", get(get_mansioni))
+        .route("/remove_mansione", post(remove_mansione))
+        .route("/add_opera", post(add_opere))
+        .route("/update_opera", post(update_opere))
+        .route("/get_opere", get(get_opere))
+        .route("/remove_opera", post(remove_opera))
+        .route("/add_tipo_proprieta", post(add_tipi_proprieta))
+        .route("/update_tipo_proprieta", post(update_tipi_proprieta))
+        .route("/get_tipi_proprieta", get(get_tipi_proprieta))
+        .route("/remove_tipo_proprieta", post(remove_tipo_proprieta))
         .layer(session_layer)
         .with_state(pool.into());
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));

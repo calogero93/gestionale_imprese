@@ -6,10 +6,10 @@ diesel::table! {
         descrizione -> Nullable<Text>,
         modello -> Text,
         targa -> Text,
-        tipo_proprieta -> Nullable<Int4>,
+        tipo_proprieta -> Int4,
         #[max_length = 255]
         proprieta -> Varchar,
-        impresa_id -> Nullable<Int4>,
+        impresa_id -> Int4,
         data_dimissioni -> Date,
         #[max_length = 50]
         rfid1 -> Varchar,
@@ -31,26 +31,9 @@ diesel::table! {
         luogo_di_nascita -> Text,
         #[max_length = 255]
         codice_fiscale -> Varchar,
-        impresa_id -> Nullable<Int4>,
-        qualifica -> Nullable<Int4>,
-        mansione -> Nullable<Int4>,
-        data_dimissioni -> Date,
-        #[max_length = 50]
-        rfid1 -> Varchar,
-        #[max_length = 50]
-        rfid2 -> Varchar,
-    }
-}
-
-diesel::table! {
-    impreses (id) {
-        id -> Int4,
-        ragion_sociale -> Nullable<Text>,
-        indirizzo -> Text,
-        targa -> Text,
-        #[max_length = 255]
-        partita_iva -> Varchar,
-        proprieta -> Text,
+        impresa_id -> Int4,
+        qualifica -> Int4,
+        mansione -> Int4,
         data_dimissioni -> Date,
         #[max_length = 50]
         rfid1 -> Varchar,
@@ -62,17 +45,27 @@ diesel::table! {
 diesel::table! {
     imprese_associate_utentis (id) {
         id -> Int4,
-        utente_id -> Nullable<Int4>,
-        impresa_id -> Nullable<Int4>,
+        utente_id -> Int4,
+        impresa_id -> Int4,
     }
 }
 
 diesel::table! {
     imprese_collegates (id) {
         id -> Int4,
-        impresa_id -> Nullable<Int4>,
+        impresa_id -> Int4,
         #[max_length = 50]
         ruolo_impresa -> Varchar,
+    }
+}
+
+diesel::table! {
+    impreses (id) {
+        id -> Int4,
+        ragione_sociale -> Text,
+        indirizzo -> Text,
+        #[max_length = 255]
+        partita_iva -> Varchar,
     }
 }
 
@@ -88,10 +81,10 @@ diesel::table! {
         id -> Int4,
         descrizione -> Nullable<Text>,
         modello -> Text,
-        tipo_proprieta -> Nullable<Int4>,
+        tipo_proprieta -> Int4,
         #[max_length = 255]
         proprieta -> Varchar,
-        impresa_id -> Nullable<Int4>,
+        impresa_id -> Int4,
         data_dimissioni -> Date,
         #[max_length = 50]
         rfid1 -> Varchar,
@@ -122,16 +115,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    users (id) {
-        id -> Int4,
-        #[max_length = 50]
-        username -> Varchar,
-        #[max_length = 255]
-        password -> Varchar,
-    }
-}
-
-diesel::table! {
     utentis (id) {
         id -> Int4,
         #[max_length = 50]
@@ -142,10 +125,12 @@ diesel::table! {
         nome -> Varchar,
         #[max_length = 255]
         cognome -> Varchar,
-        impresa_id -> Nullable<Int4>,
+        impresa_id -> Int4,
         #[max_length = 255]
         utente -> Varchar,
-        autorizazzione -> Bool,
+        autorizazzione -> Nullable<Bool>,
+        primo_login -> Nullable<Bool>,
+        super_utente -> Nullable<Bool>,
     }
 }
 
@@ -164,14 +149,13 @@ diesel::joinable!(utentis -> impreses (impresa_id));
 diesel::allow_tables_to_appear_in_same_query!(
     autovettures,
     dipendentis,
-    impreses,
     imprese_associate_utentis,
     imprese_collegates,
+    impreses,
     mansionis,
     mezzis,
     operes,
     qualifiches,
     tipi_proprietas,
-    users,
     utentis,
 );
