@@ -237,13 +237,12 @@ pub async fn update_dipendenti(
         None => return Err("Unauthorized".to_string())
     };
 
-    let id_impresa = match session.get::<String>("impresa_id"){
+    let id_impresa = match session.get::<i32>("impresa_id"){
         Some(user_id) => user_id,
         None => return Err("Unauthorized".to_string())
     };
 
     let user_id: i32 = user_id.parse().unwrap();
-    let id_impresa: i32 = id_impresa.parse().unwrap();
     let utente = get_utente(&mut conn, payload.id)?;
 
     let imprese_associate = get_imprese_associate_utenti(&mut conn, user_id)?;
@@ -284,13 +283,12 @@ pub async fn update_mezzi(
         None => return Err("Unauthorized".to_string())
     };
 
-    let id_impresa = match session.get::<String>("impresa_id"){
+    let id_impresa = match session.get::<i32>("impresa_id"){
         Some(user_id) => user_id,
         None => return Err("Unauthorized".to_string())
     };
 
     let user_id: i32 = user_id.parse().unwrap();
-    let id_impresa: i32 = id_impresa.parse().unwrap();
     let mezzo = get_mezzo(&mut conn, payload.id)?;
 
     let imprese_associate = get_imprese_associate_utenti(&mut conn, user_id)?;
@@ -333,13 +331,12 @@ pub async fn update_autovetture(
         None => return Err("Unauthorized".to_string())
     };
 
-    let id_impresa = match session.get::<String>("impresa_id"){
+    let id_impresa = match session.get::<i32>("impresa_id"){
         Some(user_id) => user_id,
         None => return Err("Unauthorized".to_string())
     };
 
     let user_id: i32 = user_id.parse().unwrap();
-    let id_impresa: i32 = id_impresa.parse().unwrap();
     let autevettura = get_autovettura(&mut conn, payload.id)?;
 
     let imprese_associate = get_imprese_associate_utenti(&mut conn, user_id)?;

@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use axum::{extract::{Query, State}, Json};
 use axum_sessions::extractors::ReadableSession;
-use diesel::{r2d2::{self, ConnectionManager}, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl, TextExpressionMethods};
-use crate::{models, query_states::*, schema, utils::*};
+use diesel::{r2d2::{self, ConnectionManager}, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl, SelectableHelper, TextExpressionMethods};
+use crate::{models::{self, Imprese}, query_states::*, response_states::UtentiResponse, schema, utils::*};
 
 
 type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
@@ -31,7 +31,6 @@ type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 }*/
 
 pub async fn get_qualifiche(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetQualificheQuery>,
 ) -> Result<Json<Vec<models::Qualifiche>>, String> {
@@ -53,7 +52,6 @@ pub async fn get_qualifiche(
 }
 
 pub async fn get_qualifica(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetQualificaQuery>,
 ) -> Result<Json<models::Qualifiche>, String> {
@@ -69,7 +67,6 @@ pub async fn get_qualifica(
 }
 
 pub async fn get_mansioni(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetMansioniQuery>,
 ) -> Result<Json<Vec<models::Mansioni>>, String> {
@@ -90,8 +87,23 @@ pub async fn get_mansioni(
     Ok(Json(results))
 }
 
+pub async fn get_mansione(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetMansioneQuery>,
+) -> Result<Json<models::Mansioni>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    use schema::mansionis::dsl::*;
+    
+
+    let results = mansionis.filter(id.eq(params.id))
+        .first::<models::Mansioni>(&mut conn)
+        .map_err(|e| format!("Failed to load mansione: {}", e))?;
+
+    Ok(Json(results))
+}
+
 pub async fn get_opere(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetOpereQuery>,
 ) -> Result<Json<Vec<models::Opere>>, String> {
@@ -112,8 +124,22 @@ pub async fn get_opere(
     Ok(Json(results))
 }
 
+pub async fn get_opera(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetOperaQuery>,
+) -> Result<Json<models::Opere>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    use schema::operes::dsl::*;
+
+    let results = operes.filter(id.eq(params.id))
+        .first::<models::Opere>(&mut conn)
+        .map_err(|e| format!("Failed to load opera: {}", e))?;
+
+    Ok(Json(results))
+}
+
 pub async fn get_tipi_proprieta(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetTipiProprietaQuery>,
 ) -> Result<Json<Vec<models::TipiProprieta>>, String> {
@@ -134,8 +160,22 @@ pub async fn get_tipi_proprieta(
     Ok(Json(results))
 }
 
+pub async fn get_tipo_proprieta(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetTipoProprietaQuery>,
+) -> Result<Json<models::TipiProprieta>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    use schema::tipi_proprietas::dsl::*;
+
+    let results = tipi_proprietas.filter(id.eq(params.id))
+        .first::<models::TipiProprieta>(&mut conn)
+        .map_err(|e| format!("Failed to load tipo proprieta: {}", e))?;
+
+    Ok(Json(results))
+}
+
 pub async fn get_imprese(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetImpreseQuery>,
 ) -> Result<Json<Vec<models::Imprese>>, String> {
@@ -164,14 +204,30 @@ pub async fn get_imprese(
     Ok(Json(results))
 }
 
+pub async fn get_impresa(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetImpresaQuery>,
+) -> Result<Json<models::Imprese>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    use schema::impreses::dsl::*;
+
+    let results = impreses.filter(id.eq(params.id))
+        .first::<models::Imprese>(&mut conn)
+        .map_err(|e| format!("Failed to load impresa: {}", e))?;
+
+    Ok(Json(results))
+}
+
 pub async fn get_imprese_collegate(
     session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetImpreseCollegateQuery>,
-) -> Result<Json<Vec<models::ImpreseCollegate>>, String> {
+) -> Result<Json<Vec<models::Imprese>>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
     use schema::imprese_collegates::dsl::*;
+    use schema::impreses::dsl::*;
 
     let mut query_builder = imprese_collegates.into_boxed();
 
@@ -187,17 +243,48 @@ pub async fn get_imprese_collegate(
         .load::<models::ImpreseCollegate>(&mut conn)
         .map_err(|e| format!("Failed to load impresa collegata: {}", e))?;
 
+    let id_impresa = match session.get::<i32>("impresa_id"){
+            Some(user_id) => user_id,
+            None => return Err("Unauthorized".to_string())};
+
+
+    let imprese_ids = results.clone().into_iter().filter(|impresa| impresa.impresa_id == params.impresa_id.unwrap()).map(|impresa| impresa.imprese_collegata_id).collect::<Vec<i32>>();
+
+    let result: Vec<models::Imprese> = impreses
+    .select(models::Imprese::as_select())
+    .filter(schema::impreses::dsl::id.eq_any(imprese_ids))
+    .load::<models::Imprese>(&mut conn)
+    .map_err(|e| format!("Failed to load imprese: {}", e))?;
+
+    Ok(Json(result))
+}
+
+
+pub async fn get_impresa_collegata(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetImpresaCollegataQuery>,
+) -> Result<Json<models::ImpreseCollegate>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    use schema::imprese_collegates::dsl::*;
+
+    let results = imprese_collegates.filter(id.eq(params.id))
+        .first::<models::ImpreseCollegate>(&mut conn)
+        .map_err(|e| format!("Failed to load impresa collegata: {}", e))?;
+
     Ok(Json(results))
 }
 
 pub async fn get_utenti(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetUtentiQuery>,
-) -> Result<Json<Vec<models::Utenti>>, String> {
+) -> Result<Json<Vec<UtentiResponse>>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
     use schema::utentis::dsl::*;
+    use schema::impreses::dsl::*;
+
+    let mut list_users: Vec<UtentiResponse> = vec![];
 
     let mut query_builder = utentis.into_boxed();
 
@@ -213,21 +300,60 @@ pub async fn get_utenti(
         query_builder = query_builder.filter(cognome.like(format!("%{}%", cognome_filter)));
     }
 
-    let results = query_builder
+    let utenti_results = query_builder
         .load::<models::Utenti>(&mut conn)
+        .map_err(|e| format!("Failed to load utente: {}", e))?;
+
+    let imprese_results = impreses
+        .load::<models::Imprese>(&mut conn)
+        .map_err(|e| format!("Failed to load utente: {}", e))?;
+
+    for user in utenti_results {
+        let ragione_sociale_impresa = imprese_results.iter()
+        .find(|impresa| impresa.id == user.impresa_id)
+        .map(|impresa| impresa.ragione_sociale.clone())
+        .unwrap_or_default();
+        list_users.push(UtentiResponse {
+            id: user.id,
+            impresa: ragione_sociale_impresa.to_string(),
+            nome: user.nome,
+            cognome: user.cognome,
+            username: user.username,
+            revocato: user.autorizazzione.unwrap(),
+        })
+    }
+
+
+    if let Some(impresa_filter) = params.impresa {
+        list_users = list_users.into_iter().filter(|user| user.impresa.to_lowercase().contains(&impresa_filter)).collect();
+    }
+
+    Ok(Json(list_users))
+}
+
+pub async fn get_utente(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetUtenteQuery>,
+) -> Result<Json<models::Utenti>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    use schema::utentis::dsl::*;
+
+    let results = utentis.filter(id.eq(params.id))
+        .first::<models::Utenti>(&mut conn)
         .map_err(|e| format!("Failed to load utente: {}", e))?;
 
     Ok(Json(results))
 }
 
 pub async fn get_imprese_associate_utenti(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetImpreseAssociateUtentisQuery>,
-) -> Result<Json<Vec<models::ImpreseAssociateUtenti>>, String> {
+) -> Result<Json<Vec<models::Imprese>>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
     use schema::imprese_associate_utentis::dsl::*;
+    use schema::impreses::dsl::*;
 
     let mut query_builder = imprese_associate_utentis.into_boxed();
 
@@ -243,11 +369,34 @@ pub async fn get_imprese_associate_utenti(
         .load::<models::ImpreseAssociateUtenti>(&mut conn)
         .map_err(|e| format!("Failed to load impresa associata utente: {}", e))?;
 
+    let imprese_ids = results.clone().into_iter().filter(|impresa| impresa.utente_id == params.utente_id.unwrap()).map(|impresa| impresa.impresa_id).collect::<Vec<i32>>();
+
+    let result: Vec<models::Imprese> = impreses
+    .select(models::Imprese::as_select())
+    .filter(schema::impreses::dsl::id.eq_any(imprese_ids))
+    .load::<models::Imprese>(&mut conn)
+    .map_err(|e| format!("Failed to load imprese: {}", e))?;
+
+
+    Ok(Json(result))
+}
+
+pub async fn get_impresa_associata_utente(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetImpresaAssiociataUtenteQuery>,
+) -> Result<Json<models::ImpreseAssociateUtenti>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    use schema::imprese_associate_utentis::dsl::*;
+
+    let results = imprese_associate_utentis.filter(id.eq(params.id))
+        .first::<models::ImpreseAssociateUtenti>(&mut conn)
+        .map_err(|e| format!("Failed to load impresa associata utente: {}", e))?;
+
     Ok(Json(results))
 }
 
 pub async fn get_dipendenti(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetDipendentiQuery>,
 ) -> Result<Json<Vec<models::Dipendenti>>, String> {
@@ -312,8 +461,23 @@ pub async fn get_dipendenti(
     Ok(Json(results))
 }
 
+
+pub async fn get_dipendente(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetDipendenteQuery>,
+) -> Result<Json<models::Dipendenti>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    use schema::dipendentis::dsl::*;
+
+    let results = dipendentis.filter(id.eq(params.id))
+        .first::<models::Dipendenti>(&mut conn)
+        .map_err(|e| format!("Failed to load dipendente: {}", e))?;
+
+    Ok(Json(results))
+}
+
 pub async fn get_mezzi(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetMezziQuery>,
 ) -> Result<Json<Vec<models::Mezzi>>, String> {
@@ -362,8 +526,22 @@ pub async fn get_mezzi(
     Ok(Json(results))
 }
 
+pub async fn get_mezzo(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetMezzoQuery>,
+) -> Result<Json<models::Mezzi>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+
+    use schema::mezzis::dsl::*;
+
+    let results = mezzis.filter(id.eq(params.id))
+        .first::<models::Mezzi>(&mut conn)
+        .map_err(|e| format!("Failed to load mezzo: {}", e))?;
+
+    Ok(Json(results))
+}
+
 pub async fn get_autovetture(
-    session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetAutovettureQuery>,
 ) -> Result<Json<Vec<models::Autovetture>>, String> {
@@ -416,7 +594,17 @@ pub async fn get_autovetture(
     Ok(Json(results))
 }
 
+pub async fn get_autovettura(
+    State(pool): State<Arc<DbPool>>,
+    Query(params): Query<GetAutovetturaQuery>,
+) -> Result<Json<models::Autovetture>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
+    use schema::autovettures::dsl::*;
 
+    let results = autovettures.filter(id.eq(params.id))
+        .first::<models::Autovetture>(&mut conn)
+        .map_err(|e| format!("Failed to load autovettura: {}", e))?;
 
-
+    Ok(Json(results))
+}

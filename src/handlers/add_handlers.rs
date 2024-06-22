@@ -196,12 +196,21 @@ pub async fn add_imprese_collegate(
         None => return Err("Unauthorized".to_string())
     };
 
+
+    let id_impresa = match session.get::<i32>("impresa_id"){
+        Some(user_id) => user_id,
+        None => return Err("Unauthorized".to_string())
+    };
+
     use schema::imprese_collegates;
 
     let new_collegato = models::NewImpreseCollegata {
         impresa_id: payload.impresa_id,
         ruolo_impresa: payload.ruolo_impresa.clone(),
+        imprese_collegata_id: payload.imprese_collegata_id
     };
+
+    dbg!(new_collegato.clone());
 
     let collegato_id: i32 = diesel::insert_into(imprese_collegates::table)
         .values(&new_collegato)

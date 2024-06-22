@@ -66,7 +66,7 @@ pub struct NewDipendente {
     pub rfid2: String,
 }
 
-#[derive(Queryable, Serialize, AsChangeset)]
+#[derive(Queryable, Serialize, AsChangeset, Selectable, Clone)]
 pub struct Imprese {
     pub id: i32,
     pub ragione_sociale: String,
@@ -82,7 +82,7 @@ pub struct NewImpresa {
     pub partita_iva: String,
 }
 
-#[derive(Queryable, Serialize, AsChangeset)]
+#[derive(Queryable, Serialize, AsChangeset, Clone, Debug)]
 pub struct ImpreseAssociateUtenti {
     pub id: i32,
     pub utente_id: i32,
@@ -96,18 +96,20 @@ pub struct NewImpreseAssociateUtente {
     pub impresa_id: i32,
 }
 
-#[derive(Queryable, Serialize, AsChangeset)]
+#[derive(Queryable, Serialize, AsChangeset, Clone)]
 pub struct ImpreseCollegate {
     pub id: i32,
     pub impresa_id: i32,
+    pub imprese_collegata_id: i32,
     pub ruolo_impresa: String,
 }
 
-#[derive(Insertable, Serialize)]
+#[derive(Insertable, Serialize, Debug, Clone)]
 #[table_name = "imprese_collegates"]
 pub struct NewImpreseCollegata {
     pub impresa_id: i32,
     pub ruolo_impresa: String,
+    pub imprese_collegata_id: i32
 }
 
 #[derive(Queryable, Serialize, AsChangeset)]

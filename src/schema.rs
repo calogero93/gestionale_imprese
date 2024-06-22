@@ -54,6 +54,7 @@ diesel::table! {
     imprese_collegates (id) {
         id -> Int4,
         impresa_id -> Int4,
+        imprese_collegata_id -> Int4,
         #[max_length = 50]
         ruolo_impresa -> Varchar,
     }

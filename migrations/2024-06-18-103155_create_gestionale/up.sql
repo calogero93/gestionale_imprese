@@ -30,6 +30,7 @@ CREATE TABLE impreses (
 CREATE TABLE imprese_collegates (
     id SERIAL PRIMARY KEY,
     impresa_id INT REFERENCES impreses(id) NOT NULL,
+    imprese_collegata_id INT NOT NULL,
     ruolo_impresa VARCHAR(50) NOT NULL
 );
 
@@ -95,3 +96,5 @@ CREATE TABLE autovettures (
 );
 
 
+INSERT INTO "impreses" ("ragione_sociale", "partita_iva", "indirizzo") VALUES ('super', 'super', 'super');
+INSERT INTO "utentis" ("username", "password", "nome", "cognome", "impresa_id", "utente", "primo_login", "super_utente") VALUES ('super', 'super', 'super', 'super', 1, 'super', FALSE, TRUE);

@@ -3,14 +3,14 @@ use std::sync::Arc;
 use axum::{extract::{Query, State}, response::IntoResponse, Json};
 use axum_sessions::extractors::ReadableSession;
 use diesel::{r2d2::{self, ConnectionManager}, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl};
-use crate::{models, remove_state::*, schema, utils::*};
+use crate::{models, remove_state::*, schema::{self, imprese_collegates}, utils::*};
 
 
 type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
 pub async fn remove_autovettura(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveAutovetturaQuery>,
+    params: Json<RemoveAutovetturaQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
@@ -31,7 +31,7 @@ pub async fn remove_autovettura(
 
 pub async fn remove_dipendente(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveDipendenteQuery>,
+    params: Json<RemoveDipendenteQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
@@ -51,7 +51,7 @@ pub async fn remove_dipendente(
 
 pub async fn remove_impresa(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveImpresaQuery>,
+    params: Json<RemoveImpresaQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
@@ -71,13 +71,13 @@ pub async fn remove_impresa(
 
 pub async fn remove_imprese_associate_utenti(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveImpresaAssociateUtenteQuery>,
+    params: Json<RemoveImpresaAssociateUtenteQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
     use schema::imprese_associate_utentis::dsl::*;
     let num_deleted = diesel::delete(imprese_associate_utentis.filter(
-        id.eq(params.id)
+        impresa_id.eq(params.id)
     ))
     .execute(&mut conn)
     .map_err(handle_diesel_error("Failed to delete imprese associate utenti"))?;
@@ -89,9 +89,29 @@ pub async fn remove_imprese_associate_utenti(
     }
 }
 
+pub async fn remove_imprese_collegate(
+    State(pool): State<Arc<DbPool>>,
+    params: Json<RemoveImpresaCollegataQuery>,
+) -> Result<Json<String>, String> {
+    let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
+    print!("ciao");
+    use schema::imprese_collegates::dsl::*;
+    let num_deleted = diesel::delete(imprese_collegates.filter(
+        id.eq(params.id)
+    ))
+    .execute(&mut conn)
+    .map_err(handle_diesel_error("Failed to delete imprese collegate"))?;
+
+    if num_deleted > 0 {
+        Ok(Json(format!("Deleted {} imprese collegate", num_deleted)))
+    } else {
+        Err(format!("No imprese collegate found with ID {}", params.id))
+    }
+}
+
 pub async fn remove_mansione(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveMansioneQuery>,
+    params: Json<RemoveMansioneQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
@@ -111,7 +131,7 @@ pub async fn remove_mansione(
 
 pub async fn remove_mezzo(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveMezzoQuery>,
+    params: Json<RemoveMezzoQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
@@ -131,7 +151,7 @@ pub async fn remove_mezzo(
 
 pub async fn remove_opera(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveOperaQuery>,
+    params: Json<RemoveOperaQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
@@ -151,7 +171,7 @@ pub async fn remove_opera(
 
 pub async fn remove_qualifica(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveQualificaQuery>,
+    params: Json<RemoveQualificaQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
@@ -171,7 +191,7 @@ pub async fn remove_qualifica(
 
 pub async fn remove_tipo_proprieta(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveTipoProprietaQuery>,
+    params: Json<RemoveTipoProprietaQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 
@@ -191,7 +211,7 @@ pub async fn remove_tipo_proprieta(
 
 pub async fn remove_utente(
     State(pool): State<Arc<DbPool>>,
-    Query(params): Query<RemoveUtenteQuery>,
+    params: Json<RemoveUtenteQuery>,
 ) -> Result<Json<String>, String> {
     let mut conn = pool.get().map_err(|e| format!("Failed to get DB connection: {}", e))?;
 

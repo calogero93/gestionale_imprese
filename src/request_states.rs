@@ -60,6 +60,7 @@ pub struct AddImpreseAssociateUtentisRequest {
 pub struct AddImpreseCollegateRequest {
     pub impresa_id: i32,
     pub ruolo_impresa: String,
+    pub imprese_collegata_id: i32
 }
 
 #[derive(Deserialize)]
@@ -67,10 +68,6 @@ pub struct AddImpreseRequest {
     pub ragione_sociale: Option<String>,
     pub indirizzo: String,
     pub partita_iva: String,
-    pub proprieta: String,
-    pub data_dimissioni: chrono::NaiveDate,
-    pub rfid1: String,
-    pub rfid2: String,
 }
 
 #[derive(Deserialize)]
@@ -159,9 +156,17 @@ pub struct RemoveEmployeeQuery {
 
 #[derive(Deserialize)]
 pub struct ChangePasswordRequest {
+    pub id: i32,
     pub old_password: String,
     pub new_password: String,
     pub confirm_password: String,
+}
+
+#[derive(Deserialize, AsChangeset)]
+#[table_name = "utentis"]
+pub struct UpdateChangePassword {
+    pub password: String,
+    pub primo_login: Option<bool>,
 }
 
 #[derive(Deserialize, AsChangeset)]
