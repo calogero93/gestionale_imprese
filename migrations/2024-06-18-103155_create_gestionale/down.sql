@@ -1,4 +1,5 @@
 -- This file should undo anything in `up.sql`
+DROP TABLE settimanales;
 DROP TABLE autovettures;
 DROP TABLE dipendentis;
 DROP TABLE imprese_associate_utentis;

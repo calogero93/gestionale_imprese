@@ -229,6 +229,24 @@ pub async fn remove_utente(
     }
 }
 
+pub async fn remove_settimanale(
+    State(pool): State<Arc<DbPool>>,
+    params: Json<RemoveSettimanaleQuery>,
+) ->  Result<Json<String>, String> {
+    let mut conn = pool.get().expect("couldn't get db connection from pool");
+
+    use schema::settimanales::dsl::*;
+    let num_deleted = diesel::delete(settimanales.filter(id.eq(params.id)))
+        .execute(&mut conn)
+        .expect("Error deleting settimanale");
+
+        if num_deleted > 0 {
+            Ok(Json(format!("Deleted {} settimanale", num_deleted)))
+        } else {
+            Err(format!("No settimanale found with ID {}", params.id))
+        }
+}
+
 fn handle_diesel_error(custom_message: &'static str) -> impl Fn(diesel::result::Error) -> String {
     move |e| {
         println!("Diesel Error: {:?}", e);

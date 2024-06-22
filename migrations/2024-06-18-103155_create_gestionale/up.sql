@@ -95,6 +95,22 @@ CREATE TABLE autovettures (
     rfid2 VARCHAR(50) NOT NULL
 );
 
+CREATE TABLE settimanales (
+    id SERIAL PRIMARY KEY,
+    data_settimanale TEXT NOT NULL,
+    utente_id INT REFERENCES utentis(id) NOT NULL,
+    luogo_di_nascita TEXT NOT NULL,
+    data_di_nascita TEXT NOT NULL,
+    tipo_proprieta INT REFERENCES tipi_proprietas(id) NOT NULL,
+    proprieta VARCHAR(255) NOT NULL,
+    impresa_id INT REFERENCES impreses(id) NOT NULL,
+    opera_id DATE NOT NULL,
+    mezzo_id INT REFERENCES mezzis(id) NOT NULL,
+    autovettura_id INT REFERENCES autovettures(id) NOT NULL,
+    matricola VARCHAR(50) NOT NULL,
+    targa VARCHAR(50) NOT NULL
+);
+
 
 INSERT INTO "impreses" ("ragione_sociale", "partita_iva", "indirizzo") VALUES ('super', 'super', 'super');
 INSERT INTO "utentis" ("username", "password", "nome", "cognome", "impresa_id", "utente", "primo_login", "super_utente") VALUES ('super', 'super', 'super', 'super', 1, 'super', FALSE, TRUE);

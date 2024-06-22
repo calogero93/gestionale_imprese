@@ -109,6 +109,27 @@ diesel::table! {
 }
 
 diesel::table! {
+    settimanales (id) {
+        id -> Int4,
+        data_settimanale -> Text,
+        utente_id -> Int4,
+        luogo_di_nascita -> Text,
+        data_di_nascita -> Text,
+        tipo_proprieta -> Int4,
+        #[max_length = 255]
+        proprieta -> Varchar,
+        impresa_id -> Int4,
+        opera_id -> Date,
+        mezzo_id -> Int4,
+        autovettura_id -> Int4,
+        #[max_length = 50]
+        matricola -> Varchar,
+        #[max_length = 50]
+        targa -> Varchar,
+    }
+}
+
+diesel::table! {
     tipi_proprietas (id) {
         id -> Int4,
         descrizione -> Text,
@@ -145,6 +166,11 @@ diesel::joinable!(imprese_associate_utentis -> utentis (utente_id));
 diesel::joinable!(imprese_collegates -> impreses (impresa_id));
 diesel::joinable!(mezzis -> impreses (impresa_id));
 diesel::joinable!(mezzis -> tipi_proprietas (tipo_proprieta));
+diesel::joinable!(settimanales -> autovettures (autovettura_id));
+diesel::joinable!(settimanales -> impreses (impresa_id));
+diesel::joinable!(settimanales -> mezzis (mezzo_id));
+diesel::joinable!(settimanales -> tipi_proprietas (tipo_proprieta));
+diesel::joinable!(settimanales -> utentis (utente_id));
 diesel::joinable!(utentis -> impreses (impresa_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
@@ -157,6 +183,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     mezzis,
     operes,
     qualifiches,
+    settimanales,
     tipi_proprietas,
     utentis,
 );

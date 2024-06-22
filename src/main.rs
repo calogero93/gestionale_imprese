@@ -525,6 +525,10 @@ async fn main() {
         .route("/get_tipo_proprieta", get(get_tipo_proprieta))
         .route("/get_impresa_associata_utente", get(handlers::get_handlers::get_impresa_associata_utente))
         .route("/get_impresa_collegata", get(handlers::get_handlers::get_impresa_collegata))
+        .route("/add_settimanale", post(add_settimanale))
+        .route("/get_settimanale", get(get_settimanales))
+        .route("/update_settimanale", post(update_settimanale))
+        .route("/remove_settimanale", post(remove_settimanale))
         .layer(session_layer)
         .with_state(pool.into());
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));

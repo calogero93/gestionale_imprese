@@ -1,8 +1,42 @@
 use axum_sessions::async_session::chrono;
 use diesel::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use super::schema::*;
 
+#[derive(Queryable, Serialize, AsChangeset)]
+pub struct Settimanale {
+    pub id: i32,
+    pub data_settimanale: String,
+    pub utente_id: i32,
+    pub luogo_di_nascita: String,
+    pub data_di_nascita: String,
+    pub tipo_proprieta: i32, // Deve essere correttamente mappato al tipo appropriato
+    pub proprieta: String,
+    pub impresa_id: i32, // Deve essere correttamente mappato al tipo appropriato
+    pub opera_id: chrono::NaiveDate,
+    pub mezzo_id: i32, // Deve essere correttamente mappato al tipo appropriato
+    pub autovettura_id: i32, // Deve essere correttamente mappato al tipo appropriato
+    pub matricola: String,
+    pub targa: String,
+}
+
+
+#[derive(Insertable, Serialize, Deserialize)]
+#[table_name = "settimanales"]
+pub struct NewSettimanale {
+    pub data_settimanale: String,
+    pub utente_id: i32,
+    pub luogo_di_nascita: String,
+    pub data_di_nascita: String,
+    pub tipo_proprieta: i32,
+    pub proprieta: String,
+    pub impresa_id: i32,
+    pub opera_id: chrono::NaiveDate,
+    pub mezzo_id: i32,
+    pub autovettura_id: i32,
+    pub matricola: String,
+    pub targa: String,
+}
 
 #[derive(Queryable, Serialize, AsChangeset)]
 pub struct Autovetture {

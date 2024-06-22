@@ -54,3 +54,9 @@ pub struct RemoveMezzoQuery {
 pub struct RemoveAutovetturaQuery {
     pub id: i32,
 }
+
+
+#[derive(Deserialize)]
+pub struct RemoveSettimanaleQuery {
+    pub id: i32,
+}

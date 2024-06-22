@@ -1,12 +1,43 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use axum::{extract::State, response::IntoResponse, Json};
-use axum_sessions::extractors::ReadableSession;
+use axum_sessions::{async_session::chrono::NaiveDate, extractors::ReadableSession};
 use diesel::{r2d2::{self, ConnectionManager}, PgConnection, RunQueryDsl};
-use crate::{models, request_states::*, schema, utils::*};
+use crate::{models::{self, NewSettimanale}, request_states::*, schema, utils::*};
 
 
 type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
+
+pub async fn add_settimanale(
+    State(pool): State<Arc<DbPool>>,
+    payload: Json<NewSettimanale>,
+) -> anyhow::Result<impl IntoResponse, String> {
+    let mut conn = pool.get().expect("couldn't get db connection from pool");
+
+    use schema::settimanales;
+
+    let new_settimanale = NewSettimanale {
+        data_settimanale: payload.data_settimanale.clone(),
+        utente_id: payload.utente_id,
+        luogo_di_nascita: payload.luogo_di_nascita.clone(),
+        data_di_nascita: payload.data_di_nascita.clone(),
+        tipo_proprieta: payload.tipo_proprieta,
+        proprieta: payload.proprieta.clone(),
+        impresa_id: payload.impresa_id,
+        opera_id: payload.opera_id,
+        mezzo_id: payload.mezzo_id,
+        autovettura_id: payload.autovettura_id,
+        matricola: payload.matricola.clone(),
+        targa: payload.targa.clone(),
+    };
+
+    diesel::insert_into(settimanales::table)
+        .values(&new_settimanale)
+        .execute(&mut conn)
+        .expect("Error inserting new settimanale");
+
+    Ok(Json("Settimanale aggiunto con successo".to_string()))
+}
 
 
 pub async fn add_user(
@@ -78,7 +109,7 @@ pub async fn add_autovetture(
         tipo_proprieta: payload.tipo_proprieta,
         proprieta: payload.proprieta.clone(),
         impresa_id: payload.impresa_id,
-        data_dimissioni: payload.data_dimissioni,
+        data_dimissioni:  NaiveDate::from_str(&payload.data_dimissioni).unwrap(),
         rfid1: payload.rfid1.clone(),
         rfid2: payload.rfid2.clone(),
     };

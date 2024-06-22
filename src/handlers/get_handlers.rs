@@ -30,6 +30,32 @@ type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
     Ok(Json(results))
 }*/
 
+pub async fn get_settimanales(
+    State(pool): State<Arc<DbPool>>,
+   // Query(params): Query<GetSettimanalesQuery>,
+) -> Result<Json<Vec<models::Settimanale>>, String> {
+    let mut conn = pool.get().expect("couldn't get db connection from pool");
+
+    use schema::settimanales::dsl::*;
+    let mut query_builder = settimanales.into_boxed();
+
+
+    /*if let Some(descrizione_filter) = params.descrizione {
+        query_builder = query_builder.filter(descrizione.like(format!("%{}%", descrizione_filter)));
+    }
+
+    if let Some(modello_filter) = params.modello {
+        query_builder = query_builder.filter(modello.like(format!("%{}%", modello_filter)));
+    }*/
+
+    // Aggiungi altri filtri secondo necessità
+
+    let result = settimanales
+        .load::<models::Settimanale>(&mut conn)
+        .map_err(|e| format!("Failed to load settimanale: {}", e))?;
+    Ok(Json(result))
+}
+
 pub async fn get_qualifiche(
     State(pool): State<Arc<DbPool>>,
     Query(params): Query<GetQualificheQuery>,

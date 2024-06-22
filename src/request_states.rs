@@ -1,4 +1,4 @@
-use axum_sessions::async_session::chrono;
+use axum_sessions::async_session::chrono::{self, NaiveDate};
 use diesel::query_builder::AsChangeset;
 use serde::Deserialize;
 use crate::schema::{self, *};
@@ -29,7 +29,7 @@ pub struct AddAutovettureRequest {
     pub tipo_proprieta: i32,
     pub proprieta: String,
     pub impresa_id: i32,
-    pub data_dimissioni: chrono::NaiveDate,
+    pub data_dimissioni: String,
     pub rfid1: String,
     pub rfid2: String,
 }
@@ -141,6 +141,8 @@ pub struct UpdateEmployeeRequest {
     pub ruolo: Option<String>,
 }
 
+
+
 /*#[derive(Deserialize, AsChangeset, Debug)]
 #[diesel(table_name = employees)]
 pub struct UpdateEmployeeFields {
@@ -181,6 +183,24 @@ pub struct UpdateQualificheRequest {
 pub struct UpdateMansioniRequest {
     pub id: i32,
     pub descrizione: Option<String>,
+}
+
+#[derive(AsChangeset, Deserialize)]
+#[table_name = "settimanales"]
+pub struct UpdateSettimanale {
+    pub id: i32,
+    pub data_settimanale: Option<String>,
+    pub utente_id: Option<i32>,
+    pub luogo_di_nascita: Option<String>,
+    pub data_di_nascita: Option<String>,
+    pub tipo_proprieta: Option<i32>,
+    pub proprieta: Option<String>,
+    pub impresa_id: Option<i32>,
+    pub opera_id: Option<NaiveDate>,
+    pub mezzo_id: Option<i32>,
+    pub autovettura_id: Option<i32>,
+    pub matricola: Option<String>,
+    pub targa: Option<String>,
 }
 
 #[derive(Deserialize, AsChangeset)]

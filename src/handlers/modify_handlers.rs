@@ -8,6 +8,23 @@ use crate::{models, request_states::*, schema, utils::*};
 
 type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
+pub async fn update_settimanale(
+    State(pool): State<Arc<DbPool>>,
+    payload: Json<UpdateSettimanale>,
+) -> anyhow::Result<impl IntoResponse, String> {
+    let mut conn = pool.get().expect("couldn't get db connection from pool");
+
+    use schema::settimanales::dsl::*;
+
+    let target = settimanales.filter(id.eq(payload.id));
+    let changes = diesel::update(target)
+        .set(&payload.0)
+        .execute(&mut conn)
+        .expect("Error updating settimanale");
+
+        Ok(Json("Settimanale aggiornato con successo").into_response())
+}
+
 pub async fn update_qualifiche(
     session: ReadableSession,
     State(pool): State<Arc<DbPool>>,
