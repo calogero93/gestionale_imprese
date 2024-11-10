@@ -1,4 +1,4 @@
-use axum_sessions::async_session::chrono::{self, NaiveDate};
+use chrono::NaiveDate;
 use diesel::query_builder::AsChangeset;
 use serde::Deserialize;
 use crate::schema::{self, *};
@@ -22,19 +22,27 @@ pub struct AddUserRequest {
 }
 
 #[derive(Deserialize)]
+pub struct Assegnamenti { 
+
+    pub dipendente_id: i32,
+    pub autovettura_id: i32
+
+}
+
+#[derive(Deserialize)]
 pub struct AddSettimanaleRequest {
+    pub assegnazione: Vec<Assegnamenti>,
     pub data_settimanale: String,
-    pub utente_id: i32,
-    pub luogo_di_nascita: String,
-    pub data_di_nascita: NaiveDate,
-    pub tipo_proprieta: i32,
-    pub proprieta: String,
+    //pub luogo_di_nascita: String,
+    //pub data_di_nascita: NaiveDate,
+    //pub tipo_proprieta: i32,
+    //pub proprieta: String,
     pub impresa_id: i32,
     pub opera_id: i32,
-    pub mezzo_id: Option<i32>,
-    pub autovettura_id: i32,
-    pub matricola: Option<String>,
-    pub targa: String,
+    //pub mezzo_id: Option<i32>,
+    //pub autovettura_id: i32,
+    //pub matricola: Option<String>,
+    //pub targa: String,
 }
 
 
@@ -46,7 +54,7 @@ pub struct AddAutovettureRequest {
     pub tipo_proprieta: i32,
     pub proprieta: String,
     pub impresa_id: i32,
-    pub data_dimissioni: String,
+    pub data_dimissioni: NaiveDate,
     pub rfid1: String,
     pub rfid2: String,
 }
@@ -62,9 +70,9 @@ pub struct AddDipendentiRequest {
     pub impresa_id: i32,
     pub qualifica: i32,
     pub mansione: i32,
-    pub data_dimissioni: chrono::NaiveDate,
-    pub rfid1: String,
-    pub rfid2: String,
+    pub data_dimissioni: Option<chrono::NaiveDate>,
+    pub rfid1: Option<String>,
+    pub rfid2: Option<String>,
 }
 
 #[derive(Deserialize)]

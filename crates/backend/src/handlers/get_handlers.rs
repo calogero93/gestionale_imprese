@@ -1,20 +1,22 @@
-use std::sync::Arc;
+use std::{collections::{HashMap, HashSet}, sync::Arc};
 
 use api_error::APIError;
-use axum::{extract::{Query, State}, Json};
+use api_utils::parse_week_start_date;
+use axum::{extract::{Query, State}, Extension, Json};
 use axum_sessions::extractors::ReadableSession;
 use chrono::{DateTime, FixedOffset, NaiveTime};
+use futures::future::try_join_all;
 use hyper::StatusCode;
 use prisma::PrismaClient;
 use tokio::sync::Mutex;
-use crate::{entities::{AutovettureEntity, DipendentiEntity, ImpreseAssociateUtentiEntity, ImpreseCollegateEntity, ImpreseEntity, MansioneEntity, MezziEntity, OpereEntity, QualificaEntity, SettimanaleEntity, TipiProprietaEntity, UtentiEntity}, query_states::*, response_states::UtentiResponse, utils::*};
+use crate::{entities::{AutovettureEntity, DipendentiEntity, ImpreseAssociateUtentiEntity, ImpreseCollegateEntity, ImpreseEntity, MansioneEntity, MezziEntity, OpereEntity, QualificaEntity, SettimanaleEntity, TipiProprietaEntity, UtentiEntity}, query_states::*, response_states::{SettimanaleResponse, UtentiResponse}, utils::*};
 
 
 
 pub async fn get_settimanale(
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Query(params): Query<GetSettimanaleQuery>,
-) -> Result<Json<Vec<SettimanaleEntity>>, APIError> {
+) -> Result<Json<Vec<SettimanaleResponse>>, APIError> {
     let client = prisma.lock().await;
 
     // Costruisce i filtri condizionali
@@ -98,7 +100,7 @@ pub async fn get_settimanale(
         ));
     }
 
-    let results = client
+    let settimanale_records = client
         .settimanale()
         .find_many(filters)
         .exec()
@@ -109,9 +111,150 @@ pub async fn get_settimanale(
             error_code: Some(500),
         })?;
 
-    Ok(Json(results))
+    // Collect unique `utente_id`s from the `settimanale` records
+    let unique_utente_ids: Vec<i32> = settimanale_records
+        .iter()
+        .map(|settimanale| settimanale.utente_id)
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    // Fetch `Dipendente` records for these unique `utente_id`s
+    let dipendenti_records = client
+        .dipendenti()
+        .find_many(vec![
+            prisma::dipendenti::WhereParam::Id(prisma::read_filters::IntFilter::InVec(unique_utente_ids.clone())),
+        ])
+        .exec()
+        .await
+        .map_err(|err| APIError {
+            message: err.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+    // Build a HashMap for quick lookup of `Dipendente` by `utente_id`
+    let dipendente_map: HashMap<i32, prisma::dipendenti::Data> = dipendenti_records
+        .into_iter()
+        .map(|dipendente| (dipendente.id, dipendente))
+        .collect();
+
+    // Build the final `SettimanaleResponse` list
+    let settimanale_responses: Vec<SettimanaleResponse> = settimanale_records
+        .into_iter()
+        .filter_map(|settimanale| {
+            // Find the corresponding `Dipendente` by `utente_id`
+            if let Some(dipendente) = dipendente_map.get(&settimanale.utente_id) {
+                Some(SettimanaleResponse {
+                    nome: dipendente.nome.clone(),
+                    cognome: dipendente.cognome.clone(),
+                    data_settimanale: settimanale.data_settimanale,
+                    utente_id: settimanale.utente_id,
+                    luogo_di_nascita: settimanale.luogo_di_nascita.clone(),
+                    data_di_nascita: settimanale.data_di_nascita,
+                    tipo_proprieta: settimanale.tipo_proprieta,
+                    proprieta: settimanale.proprieta.clone(),
+                    impresa_id: settimanale.impresa_id,
+                    opera_id: settimanale.opera_id,
+                    mezzo_id: settimanale.mezzo_id,
+                    autovettura_id: settimanale.autovettura_id,
+                    matricola: settimanale.matricola.clone(),
+                    targa: settimanale.targa.clone(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    Ok(Json(settimanale_responses))
 }
 
+
+pub async fn get_settimanale_in_range(
+    State(prisma): State<Arc<Mutex<PrismaClient>>>,
+    Query(params): Query<GetSettimanaleRangeQuery>,
+) -> Result<Json<Vec<SettimanaleResponse>>, APIError> {
+
+    let start_date = &params.inizio;
+    let end_date = &params.fine;
+
+    let client = prisma.lock().await;
+
+    let filters = vec![
+        prisma::settimanale::WhereParam::DataSettimanale(
+            prisma::read_filters::StringFilter::Gte(start_date.to_string()),
+        ),
+        prisma::settimanale::WhereParam::DataSettimanale(
+            prisma::read_filters::StringFilter::Lte(end_date.to_string()),
+        ),
+        prisma::settimanale::WhereParam::OperaId(
+            prisma::read_filters::IntFilter::Equals(params.opera_id),
+        ),
+        prisma::settimanale::WhereParam::ImpresaId(
+            prisma::read_filters::IntFilter::Equals(params.impresa_id),
+        ),
+    ];
+
+    let settimanale_records = client
+        .settimanale()
+        .find_many(filters)
+        .exec()
+        .await
+        .map_err(|err| APIError {
+            message: err.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+    let unique_utente_ids: HashSet<_> = settimanale_records.iter().map(|s| s.utente_id).collect();
+
+    let dipendenti_records = client
+        .dipendenti()
+        .find_many(vec![
+            prisma::dipendenti::WhereParam::Id(prisma::read_filters::IntFilter::InVec(unique_utente_ids.iter().cloned().collect())),
+        ])
+        .exec()
+        .await
+        .map_err(|err| APIError {
+            message: err.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+    let dipendente_map: HashMap<i32, prisma::dipendenti::Data> = dipendenti_records
+        .into_iter()
+        .map(|dipendente| (dipendente.id, dipendente))
+        .collect();
+
+    let settimanale_responses: Vec<SettimanaleResponse> = settimanale_records
+        .into_iter()
+        .filter_map(|settimanale| {
+            if let Some(dipendente) = dipendente_map.get(&settimanale.utente_id) {
+                Some(SettimanaleResponse {
+                    nome: dipendente.nome.clone(),
+                    cognome: dipendente.cognome.clone(),
+                    data_settimanale: settimanale.data_settimanale,
+                    utente_id: settimanale.utente_id,
+                    luogo_di_nascita: settimanale.luogo_di_nascita.clone(),
+                    data_di_nascita: settimanale.data_di_nascita,
+                    tipo_proprieta: settimanale.tipo_proprieta,
+                    proprieta: settimanale.proprieta.clone(),
+                    impresa_id: settimanale.impresa_id,
+                    opera_id: settimanale.opera_id,
+                    mezzo_id: settimanale.mezzo_id,
+                    autovettura_id: settimanale.autovettura_id,
+                    matricola: settimanale.matricola.clone(),
+                    targa: settimanale.targa.clone(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    Ok(Json(settimanale_responses))
+}
 
 pub async fn get_qualifiche(
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
@@ -335,6 +478,7 @@ pub async fn get_tipo_proprieta(
 
 pub async fn get_imprese(
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
+    Extension(user): Extension<UtentiEntity>,
     Query(params): Query<GetImpreseQuery>,
 ) -> Result<Json<Vec<ImpreseEntity>>, APIError> {
     let client = prisma.lock().await;
@@ -371,6 +515,64 @@ pub async fn get_imprese(
 }
 
 
+pub async fn get_imprese_by_user(
+    State(prisma): State<Arc<Mutex<PrismaClient>>>,
+    Extension(user): Extension<UtentiEntity>,
+    Query(params): Query<GetImpreseQuery>,
+) -> Result<Json<Vec<ImpreseEntity>>, APIError> {
+    let client = prisma.lock().await;
+
+    let mut filters = vec![];
+
+    let results = client
+        .imprese()
+        .find_many(filters)
+        .exec()
+        .await
+        .map_err(|err| APIError {
+            message: err.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+    let imprese: Vec<ImpreseEntity> = results.into_iter().filter(|impresa| impresa.id == user.impresa_id.unwrap()).collect();
+
+
+    let imprese_collegate = client
+        .imprese_collegate()
+        .find_many(vec![prisma::imprese_collegate::WhereParam::ImpresaId(prisma::read_filters::IntFilter::Equals(imprese[0].id))])
+        .exec()
+        .await
+        .map_err(|e| APIError {
+            message: e.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+    let imprese_ids: Vec<i32> = imprese_collegate
+        .into_iter()
+        .filter(|impresa| impresa.impresa_id == user.impresa_id.unwrap())
+        .map(|impresa| impresa.imprese_collegata_id)
+        .collect();
+
+    let mut result = client
+        .imprese()
+        .find_many(vec![prisma::imprese::WhereParam::Id(prisma::read_filters::IntFilter::InVec(imprese_ids))])
+        .exec()
+        .await
+        .map_err(|e| APIError {
+            message: e.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+    result.push(imprese[0].clone());
+
+
+    Ok(Json(result))
+}
+
+
 pub async fn get_impresa(
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Query(params): Query<GetImpresaQuery>,
@@ -399,20 +601,11 @@ pub async fn get_impresa(
 
 
 pub async fn get_imprese_collegate(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
+    Extension(user): Extension<UtentiEntity>,
     Query(params): Query<GetImpreseCollegateQuery>,
 ) -> Result<Json<Vec<ImpreseEntity>>, APIError> {
     let client = prisma.lock().await;
-
-    let id_impresa = match session.get::<i32>("impresa_id") {
-        Some(user_id) => user_id,
-        None => return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        }),
-    };
 
     let mut filters = vec![];
     if let Some(impresa_id_filter) = params.impresa_id {
@@ -439,7 +632,7 @@ pub async fn get_imprese_collegate(
 
     let imprese_ids: Vec<i32> = imprese_collegate
         .into_iter()
-        .filter(|impresa| impresa.impresa_id == id_impresa)
+        .filter(|impresa| impresa.impresa_id == user.impresa_id.unwrap())
         .map(|impresa| impresa.imprese_collegata_id)
         .collect();
 
@@ -663,9 +856,33 @@ pub async fn get_impresa_associata_utente(
     }).map(Json)
 }
 
-
-async fn get_dipendenti(
+pub async fn get_dipendenti_by_imprese(
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
+    Extension(user): Extension<UtentiEntity>,
+    Query(params): Query<IdQuery>,
+) -> Result<Json<Vec<DipendentiEntity>>, APIError> {
+    let client = prisma.lock().await;
+
+    let filters = vec![prisma::dipendenti::WhereParam::ImpresaId(prisma::read_filters::IntFilter::Equals(params.id))];
+
+    let results = client
+        .dipendenti()
+        .find_many(filters)
+        .exec()
+        .await
+        .map_err(|e| APIError {
+            message: e.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+    Ok(Json(results))
+}
+
+
+pub async fn get_dipendenti(
+    State(prisma): State<Arc<Mutex<PrismaClient>>>,
+    Extension(user): Extension<UtentiEntity>,
     Query(params): Query<GetDipendentiQuery>,
 ) -> Result<Json<Vec<DipendentiEntity>>, APIError> {
     let client = prisma.lock().await;
@@ -703,11 +920,11 @@ async fn get_dipendenti(
             prisma::read_filters::StringFilter::Contains(codice_fiscale_filter),
         ));
     }
-    if let Some(impresa_id_filter) = params.impresa_id {
+    /*if let Some(impresa_id_filter) = params.impresa_id {
         filters.push(prisma::dipendenti::WhereParam::ImpresaId(
             prisma::read_filters::IntFilter::Equals(impresa_id_filter),
         ));
-    }
+    }*/
     if let Some(qualifica_filter) = params.qualifica {
         filters.push(prisma::dipendenti::WhereParam::QualificaId(
             prisma::read_filters::IntFilter::Equals(qualifica_filter),
@@ -735,6 +952,8 @@ async fn get_dipendenti(
             prisma::read_filters::StringNullableFilter::Contains(rfid2_filter),
         ));
     }
+
+
 
     let results = client
         .dipendenti()
@@ -872,6 +1091,76 @@ pub async fn get_mezzo(
 
 
 pub async fn get_autovetture(
+    State(prisma): State<Arc<Mutex<PrismaClient>>>,
+    Query(params): Query<GetAutovettureQuery>,
+) -> Result<Json<Vec<AutovettureEntity>>, APIError> {
+    let client = prisma.lock().await;
+
+    let mut filters = vec![];
+    if let Some(descrizione_filter) = params.descrizione {
+        filters.push(prisma::autovetture::WhereParam::Descrizione(
+            prisma::read_filters::StringNullableFilter::Contains(descrizione_filter),
+        ));
+    }
+    if let Some(modello_filter) = params.modello {
+        filters.push(prisma::autovetture::WhereParam::Modello(
+            prisma::read_filters::StringFilter::Contains(modello_filter),
+        ));
+    }
+    if let Some(targa_filter) = params.targa {
+        filters.push(prisma::autovetture::WhereParam::Targa(
+            prisma::read_filters::StringFilter::Contains(targa_filter),
+        ));
+    }
+    if let Some(tipo_proprieta_filter) = params.tipo_proprieta {
+        filters.push(prisma::autovetture::WhereParam::TipoProprieta(
+            prisma::read_filters::IntFilter::Equals(tipo_proprieta_filter),
+        ));
+    }
+    if let Some(proprieta_filter) = params.proprieta {
+        filters.push(prisma::autovetture::WhereParam::Proprieta(
+            prisma::read_filters::StringFilter::Contains(proprieta_filter),
+        ));
+    }
+    if let Some(impresa_id_filter) = params.impresa_id {
+        filters.push(prisma::autovetture::WhereParam::ImpresaId(
+            prisma::read_filters::IntFilter::Equals(impresa_id_filter),
+        ));
+    }
+    if let Some(data_dimissioni_filter) = params.data_dimissioni {
+        let t = NaiveTime::from_hms_milli_opt(0, 0, 0, 0).unwrap();
+        let data_dimissioni_filter = DateTime::from_naive_utc_and_offset(data_dimissioni_filter.and_time(t), FixedOffset::east(0));
+        filters.push(prisma::autovetture::WhereParam::DataDimissioni(
+            prisma::read_filters::DateTimeFilter::Equals(data_dimissioni_filter),
+        ));
+    }
+    if let Some(rfid1_filter) = params.rfid1 {
+        filters.push(prisma::autovetture::WhereParam::Rfid1(
+            prisma::read_filters::StringFilter::Contains(rfid1_filter),
+        ));
+    }
+    if let Some(rfid2_filter) = params.rfid2 {
+        filters.push(prisma::autovetture::WhereParam::Rfid2(
+            prisma::read_filters::StringFilter::Contains(rfid2_filter),
+        ));
+    }
+
+    let results = client
+        .autovetture()
+        .find_many(filters)
+        .exec()
+        .await
+        .map_err(|e| APIError {
+            message: e.to_string(),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+    Ok(Json(results))
+}
+
+
+pub async fn get_autovetture_by_impresa(
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Query(params): Query<GetAutovettureQuery>,
 ) -> Result<Json<Vec<AutovettureEntity>>, APIError> {

@@ -1,10 +1,9 @@
-use async_redis_session::RedisSessionStore;
 use auth::{auth_layer::guard, jwt::encode_jwt};
 use axum::{
-    extract::{Json, Query, State}, handler::Handler, middleware, response::{IntoResponse, Response}, routing::{get, post}, Router
+    extract::{Json, Query, State}, handler::Handler, middleware, response::{IntoResponse, Response}, routing::{get, post}, Extension, Router
 };
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveTime, Offset};
-use entities::DipendentiEntity;
+use entities::{DipendentiEntity, UtentiEntity};
 use gestionale_imprese::utils::api_error::APIError;
 use handlers::{add_handlers::*, get_handlers::*, remove_handlers::*, modify_handlers::*};
 use hyper::StatusCode;
@@ -99,6 +98,7 @@ async fn login(
 
 async fn add_employee(
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
+    Extension(user): Extension<UtentiEntity>,
     Json(payload): Json<AddEmployeeRequest>,
 ) -> Result<impl IntoResponse, APIError> {
 
@@ -124,6 +124,8 @@ async fn add_employee(
         status_code: StatusCode::UNAUTHORIZED,
         error_code: Some(500),
     })?;
+
+    dbg!(user);
     
 
     Ok(Json("Employee added successfully"))
@@ -248,7 +250,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/remove_utente", post(remove_utente))
         .route("/add_dipendente", post(add_dipendenti))
         .route("/update_dipendente", post(update_dipendenti))
-        .route("/get_dipendenti", get(get_dipendente))
+        .route("/get_dipendenti", get(get_dipendenti).layer(middleware::from_fn(guard)))
+        .route("/get_dipendenti_by_imprese", get(get_dipendenti_by_imprese).layer(middleware::from_fn(guard)))
         .route("/remove_dipendente", post(remove_dipendente))
         .route("/add_mezzo", post(add_mezzi))
         .route("/update_mezzo", post(update_mezzi))
@@ -257,10 +260,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/add_autovettura", post(add_autovetture))
         .route("/update_autovettura", post(update_autovetture))
         .route("/get_autovetture", get(get_autovetture))
+        .route("/get_autovetture_by_imprese", get(get_autovetture_by_impresa).layer(middleware::from_fn(guard)))
         .route("/remove_autovettura", post(remove_autovettura))
         .route("/add_impresa", post(add_imprese))
         .route("/update_impresa", post(update_imprese))
-        .route("/get_imprese", get(get_imprese))
+        .route("/get_imprese", get(get_imprese).layer(middleware::from_fn(guard)))
+        .route("/get_imprese_by_user", get(get_imprese_by_user).layer(middleware::from_fn(guard)))
         .route("/remove_impresa", post(remove_impresa))
         .route("/add_qualifica", post(add_qualifiche))
         .route("/update_qualifica", post(update_qualifiche))
@@ -285,8 +290,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/remove_imprese_associate_utenti", post(remove_imprese_associate_utenti))
         .route("/add_imprese_collegate", post(add_imprese_collegate))
         .route("/update_imprese_collegate", post(update_imprese_collegate))
-        .route("/get_imprese_collegate", get(handlers::get_handlers::get_imprese_collegate))
-        .route("/remove_imprese_collegate", post(remove_imprese_collegate))
+        .route("/get_imprese_collegate", get(handlers::get_handlers::get_imprese_collegate).layer(middleware::from_fn(guard)))
+        .route("/remove_imprese_collegate", post(remove_imprese_collegate).layer(middleware::from_fn(guard)))
         .route("/get_utente", get(handlers::get_handlers::get_utente))
         .route("/get_dipendente", get(get_dipendente))
         .route("/get_mezzo", get(get_mezzo))
@@ -301,6 +306,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/get_settimanale", get(get_settimanale))
         .route("/update_settimanale", post(update_settimanale))
         .route("/remove_settimanale", post(remove_settimanale))
+        .route("/get_settimanale_in_range", get(get_settimanale_in_range))
         .with_state(Arc::new(Mutex::new(prisma.clone())));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));

@@ -90,6 +90,11 @@ pub struct GetImpresaAssiociataUtenteQuery {
 }
 
 #[derive(Deserialize)]
+pub struct IdQuery {
+    pub id: i32,
+}
+
+#[derive(Deserialize)]
 pub struct GetDipendentiQuery {
     pub nome: Option<String>,
     pub cognome: Option<String>,
@@ -159,4 +164,12 @@ pub struct GetSettimanaleQuery {
     pub autovettura_id: Option<i32>,
     pub matricola: Option<String>,
     pub targa: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct GetSettimanaleRangeQuery {
+    pub impresa_id: i32,
+    pub opera_id: i32,
+    pub inizio: String,
+    pub fine: String
 }

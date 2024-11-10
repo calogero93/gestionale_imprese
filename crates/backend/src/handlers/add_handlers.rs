@@ -3,11 +3,10 @@ use std::{str::FromStr, sync::Arc};
 use api_error::APIError;
 use api_utils::{get_imprese_associate_utenti, get_utente, hashing};
 use axum::{extract::State, response::IntoResponse, Json};
-use axum_sessions::{async_session::chrono::NaiveDate, extractors::ReadableSession};
 use chrono::{DateTime, FixedOffset, NaiveTime};
 use diesel::{r2d2::{self, ConnectionManager}, PgConnection, RunQueryDsl};
 use hyper::StatusCode;
-use prisma::PrismaClient;
+use prisma::{dipendenti, settimanale::autovettura, PrismaClient};
 use tokio::sync::Mutex;
 use crate::{models::{self, NewSettimanale}, request_states::*, schema, utils::*};
 
@@ -19,28 +18,64 @@ pub async fn add_settimanale(
 ) -> Result<impl IntoResponse, APIError> {
     let client = prisma.lock().await;
 
-    let t = NaiveTime::from_hms_milli_opt(0, 0, 0, 0).unwrap();
-    let data_di_nascita = DateTime::from_naive_utc_and_offset(payload.data_di_nascita.and_time(t), FixedOffset::east(0));
+    let assignments = payload.assegnazione;
 
-    client.settimanale().create(
-        payload.data_settimanale.clone(),
-        payload.luogo_di_nascita.clone(),
-        data_di_nascita,
-        payload.proprieta.clone(),
-        payload.targa,
-        prisma::utenti::UniqueWhereParam::IdEquals(payload.utente_id),
-        prisma::imprese::UniqueWhereParam::IdEquals(payload.impresa_id),
-        prisma::opere::UniqueWhereParam::IdEquals(payload.opera_id),
-        prisma::autovetture::UniqueWhereParam::IdEquals(payload.autovettura_id),
-        prisma::tipi_proprieta::UniqueWhereParam::IdEquals(payload.tipo_proprieta),
-        vec![]
-    ).exec()
-    .await
-    .map_err(|err| APIError {
-        message: format!("Failed to insert settimanale: {}", err),
-        status_code: StatusCode::INTERNAL_SERVER_ERROR,
-        error_code: Some(500),
-    })?;
+
+    for assignment in assignments {
+
+        let dipendente = client.dipendenti().find_first(vec![prisma::dipendenti::WhereParam::Id(prisma::read_filters::IntFilter::Equals(assignment.dipendente_id))])
+        .exec().await.map_err(|err| APIError {
+            message: format!("Query di ricerca dipendente fallita: {}", err),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+        if dipendente.is_none() {
+            return Err(APIError {
+                message: format!("Dipendente non trovato"),
+                status_code: StatusCode::NOT_FOUND,
+                error_code: Some(404),
+            });
+        }
+
+
+        let autovettura = client.autovetture().find_first(vec![prisma::autovetture::WhereParam::Id(prisma::read_filters::IntFilter::Equals(assignment.autovettura_id))])
+        .exec().await.map_err(|err| APIError {
+            message: format!("Query di ricerca autovettura fallita: {}", err),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+
+        if autovettura.is_none() {
+            return Err(APIError {
+                message: format!("Autovettura non trovato"),
+                status_code: StatusCode::NOT_FOUND,
+                error_code: Some(404),
+            });
+        }
+      
+        client.settimanale().create(
+            payload.data_settimanale.clone(),
+            dipendente.clone().unwrap().luogo_di_nascita,
+            dipendente.unwrap().data_di_nascita,
+            autovettura.clone().unwrap().proprieta.clone(),
+            autovettura.clone().unwrap().targa,
+            prisma::utenti::UniqueWhereParam::IdEquals(assignment.dipendente_id),
+            prisma::imprese::UniqueWhereParam::IdEquals(payload.impresa_id),
+            prisma::opere::UniqueWhereParam::IdEquals(payload.opera_id),
+            prisma::autovetture::UniqueWhereParam::IdEquals(assignment.autovettura_id),
+            prisma::tipi_proprieta::UniqueWhereParam::IdEquals(autovettura.unwrap().tipo_proprieta),
+            vec![]
+        ).exec()
+        .await
+        .map_err(|err| APIError {
+            message: format!("Failed to insert settimanale: {}", err),
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            error_code: Some(500),
+        })?;
+    }
+
+    
 
     Ok(Json("Settimanale aggiunto con successo"))
 }
@@ -49,18 +84,10 @@ pub async fn add_settimanale(
 
 
 pub async fn add_user(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Json(payload): Json<AddUserRequest>,
 ) -> Result<impl IntoResponse, APIError> {
 
-    if session.get::<bool>("super_utente").unwrap_or(false) == false {
-        return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        });
-    }
 
     let client = prisma.lock().await;
 
@@ -87,26 +114,20 @@ pub async fn add_user(
 
 
 pub async fn add_autovetture(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Json(payload): Json<AddAutovettureRequest>,
 ) -> Result<impl IntoResponse, APIError> {
 
-    if session.get::<bool>("super_utente").unwrap_or(false) == false {
-        return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        });
-    }
-
     let client = prisma.lock().await;
+
+    let t = NaiveTime::from_hms_milli_opt(0, 0, 0, 0).unwrap();
+    let data_dimissioni = DateTime::from_naive_utc_and_offset(payload.data_dimissioni.and_time(t), FixedOffset::east(0));
 
     client.autovetture().create(
         payload.modello.clone(),
         payload.targa.clone(),
         payload.proprieta,
-        DateTime::parse_from_rfc3339(&payload.data_dimissioni).unwrap(),
+        data_dimissioni,
         payload.rfid1.clone(),
         payload.rfid2.clone(),
         prisma::imprese::UniqueWhereParam::IdEquals(payload.impresa_id),
@@ -156,18 +177,9 @@ pub async fn add_dipendenti(
 
 
 pub async fn add_imprese_associate_utentis(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Json(payload): Json<AddImpreseAssociateUtentisRequest>,
 ) -> Result<impl IntoResponse, APIError> {
-
-    if session.get::<bool>("super_utente").unwrap_or(false) == false {
-        return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        });
-    }
 
     let client = prisma.lock().await;
 
@@ -188,18 +200,9 @@ pub async fn add_imprese_associate_utentis(
 
 
 pub async fn add_imprese_collegate(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Json(payload): Json<AddImpreseCollegateRequest>,
 ) -> Result<impl IntoResponse, APIError> {
-
-    if session.get::<bool>("super_utente").unwrap_or(false) == false {
-        return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        });
-    }
 
     let client = prisma.lock().await;
 
@@ -221,18 +224,9 @@ pub async fn add_imprese_collegate(
 
 
 pub async fn add_imprese(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Json(payload): Json<AddImpreseRequest>,
 ) -> Result<impl IntoResponse, APIError> {
-
-    if session.get::<bool>("super_utente").unwrap_or(false) == false {
-        return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        });
-    }
 
     let client = prisma.lock().await;
 
@@ -254,18 +248,9 @@ pub async fn add_imprese(
 
 
 pub async fn add_mansioni(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Json(payload): Json<AddMansioniRequest>,
 ) -> Result<impl IntoResponse, APIError> {
-
-    if session.get::<bool>("super_utente").unwrap_or(false) == false {
-        return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        });
-    }
 
     let client = prisma.lock().await;
 
@@ -316,18 +301,9 @@ pub async fn add_mezzi(
 
 
 pub async fn add_opere(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Json(payload): Json<AddOpereRequest>,
 ) -> Result<impl IntoResponse, APIError> {
-
-    if session.get::<bool>("super_utente").unwrap_or(false) == false {
-        return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        });
-    }
 
     let client = prisma.lock().await;
 
@@ -347,18 +323,9 @@ pub async fn add_opere(
 
 
 pub async fn add_qualifiche(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Json(payload): Json<AddQualificheRequest>,
 ) -> Result<impl IntoResponse, APIError> {
-
-    if session.get::<bool>("super_utente").unwrap_or(false) == false {
-        return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        });
-    }
 
     let client = prisma.lock().await;
 
@@ -378,18 +345,9 @@ pub async fn add_qualifiche(
 
 
 pub async fn add_tipi_proprieta(
-    session: ReadableSession,
     State(prisma): State<Arc<Mutex<PrismaClient>>>,
     Json(payload): Json<AddTipiProprietaRequest>,
 ) -> Result<impl IntoResponse, APIError> {
-
-    if session.get::<bool>("super_utente").unwrap_or(false) == false {
-        return Err(APIError {
-            message: "Unauthorized".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-            error_code: Some(401),
-        });
-    }
 
     let client = prisma.lock().await;
 

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use api_error::APIError;
 use api_utils::{get_autovettura, get_imprese_associate_utenti, get_mezzo, get_utente};
 use axum::{extract::State, response::IntoResponse, Json};
-use axum_sessions::extractors::ReadableSession;
 use chrono::{DateTime, FixedOffset, NaiveTime};
 use diesel::{r2d2::{self, ConnectionManager}, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl};
 use hyper::StatusCode;

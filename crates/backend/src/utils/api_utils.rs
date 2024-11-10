@@ -2,8 +2,10 @@ use std::fmt::format;
 use std::hash::DefaultHasher;
 use std::hash::Hasher;
 
+use chrono::NaiveDate;
 use diesel::prelude::*;
 use diesel::PgConnection;
+use regex::Regex;
 use crate::models;
 use crate::schema;
 use std::hash::Hash;
@@ -57,4 +59,21 @@ where
     let mut hasher = DefaultHasher::new();
     obj.hash(&mut hasher);
     hasher.finish()
+}
+
+
+pub fn parse_week_start_date(week_str: &str) -> Result<NaiveDate, String> {
+    let re = Regex::new(r"(\d{4}) - Week \d+ - (\d{1,2})/(\d{1,2})").unwrap();
+    
+    if let Some(captures) = re.captures(week_str) {
+        let year: i32 = captures[1].parse().unwrap();
+        let day: u32 = captures[2].parse().unwrap();
+        let month: u32 = captures[3].parse().unwrap();
+
+        NaiveDate::from_ymd_opt(year, month, day).ok_or_else(|| {
+            "Invalid date format in week string".to_string()
+        })
+    } else {
+        Err("Invalid week string format".to_string())
+    }
 }

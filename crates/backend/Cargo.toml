@@ -26,3 +26,5 @@ prisma-client-rust = { workspace = true }
 prisma = { path = "../prisma" }
 jsonwebtoken = "8.1"
 chrono = "0.4.38"
+futures = "0.3.31"
+regex = "1.11.1"

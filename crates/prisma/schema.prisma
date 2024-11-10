@@ -123,6 +123,7 @@ model Settimanale {
   autovettura_id   Int
   matricola        String?         @db.VarChar(50)
   targa            String          @db.VarChar(50)
+  editable         Boolean          @default(true)
   utente           Utenti          @relation(fields: [utente_id], references: [id])
   impresa          Imprese         @relation(fields: [impresa_id], references: [id])
   opera            Opere           @relation(fields: [opera_id], references: [id])

@@ -18,7 +18,7 @@ pub struct Claims{
 pub fn encode_jwt(email: String) -> Result<String,StatusCode>{
 
     let now = Utc::now();
-    let expire = Duration::hours(24);
+    let expire = Duration::hours(1);
 
     let claim = Claims{ iat: now.timestamp() as usize, exp: (now+expire).timestamp() as usize, email: email };
     let secret = (std::env::var("JWT_SECRET").unwrap()).clone();

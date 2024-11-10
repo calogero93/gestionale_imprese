@@ -1,7 +1,7 @@
 use axum::{http::{Request, StatusCode}, middleware::Next, response::Response, headers::{HeaderMapExt, Authorization, authorization::Bearer}};
 use prisma::utenti::WhereParam;
 
-use crate::{get_prisma_client, utils::api_error::APIError};
+use crate::{entities::UtentiEntity, get_prisma_client, utils::api_error::APIError};
 
 use super::jwt::decode_jwt;
 
@@ -27,6 +27,7 @@ pub async fn guard<T>(mut req: Request<T>, next: Next<T>) -> Result<Response,API
         .await
         .map_err(|err| APIError { message: err.to_string(), status_code: StatusCode::NOT_FOUND, error_code: Some(404) })?;
 
+    let user: UtentiEntity = user.unwrap();
     req.extensions_mut().insert(user);
 
     Ok(next.run(req).await)
