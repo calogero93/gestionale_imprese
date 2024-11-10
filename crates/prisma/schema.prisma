@@ -1,0 +1,156 @@
+generator client {
+  provider = "cargo prisma"
+  output   = "./src/generated/db.rs"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model Autovetture {
+  id              Int             @id @default(autoincrement())
+  descrizione     String?
+  modello         String
+  targa           String
+  tipo_proprieta  Int
+  proprieta       String          @db.VarChar(255)
+  impresa_id      Int
+  data_dimissioni DateTime        @db.Date
+  rfid1           String          @db.VarChar(50)
+  rfid2           String          @db.VarChar(50)
+  impresa         Imprese         @relation(fields: [impresa_id], references: [id])
+  tipo            TipiProprieta   @relation(fields: [tipo_proprieta], references: [id])
+  settimanali     Settimanale[]   @relation("Autovetture_Settimanale")
+}
+
+model Dipendenti {
+  id              Int             @id @default(autoincrement())
+  nome            String          @db.VarChar(255)
+  cognome         String          @db.VarChar(255)
+  matricola       String?         @db.VarChar(255)
+  data_di_nascita DateTime        @db.Date
+  luogo_di_nascita String
+  codice_fiscale  String          @db.VarChar(255)
+  impresa_id      Int
+  qualifica_id       Int
+  mansione_id        Int
+  data_dimissioni DateTime?        @db.Date
+  rfid1           String?          @db.VarChar(50)
+  rfid2           String?          @db.VarChar(50)
+  impresa         Imprese         @relation(fields: [impresa_id], references: [id])
+  qualifica    Qualifica       @relation(fields: [qualifica_id], references: [id])
+  mansione     Mansione        @relation(fields: [mansione_id], references: [id])
+}
+
+model ImpreseAssociateUtenti {
+  id         Int     @id @default(autoincrement())
+  utente_id  Int
+  impresa_id Int
+  utente     Utenti  @relation(fields: [utente_id], references: [id])
+  impresa    Imprese @relation(fields: [impresa_id], references: [id])
+}
+
+model ImpreseCollegate {
+  id                    Int       @id @default(autoincrement())
+  impresa_id            Int
+  imprese_collegata_id  Int
+  ruolo_impresa         String    @db.VarChar(50)
+  impresa               Imprese   @relation("ImpreseCollegate_impresa", fields: [impresa_id], references: [id])
+  collegata             Imprese   @relation("ImpreseCollegate_collegata", fields: [imprese_collegata_id], references: [id])
+}
+
+model Imprese {
+  id                  Int                 @id @default(autoincrement())
+  ragione_sociale     String
+  indirizzo           String
+  partita_iva         String              @db.VarChar(255)
+  utenti              Utenti[]
+  autovetture         Autovetture[]
+  mezzi               Mezzi[]
+  dipendenti          Dipendenti[]
+  imprese_collegate   ImpreseCollegate[]  @relation("ImpreseCollegate_impresa")
+  imprese_associate   ImpreseAssociateUtenti[]
+  imprese_collegate_inverso ImpreseCollegate[] @relation("ImpreseCollegate_collegata")
+  settimanali         Settimanale[]
+}
+
+model Mansione {
+  id          Int           @id @default(autoincrement())
+  descrizione String
+  dipendenti  Dipendenti[]
+}
+
+model Mezzi {
+  id              Int             @id @default(autoincrement())
+  descrizione     String?
+  modello         String
+  tipo_proprieta  Int
+  proprieta       String          @db.VarChar(255)
+  impresa_id      Int
+  data_dimissioni DateTime        @db.Date
+  rfid1           String          @db.VarChar(50)
+  rfid2           String          @db.VarChar(50)
+  impresa         Imprese         @relation(fields: [impresa_id], references: [id])
+  tipo            TipiProprieta   @relation(fields: [tipo_proprieta], references: [id])
+  settimanali     Settimanale[]   @relation("Mezzi_Settimanale")
+}
+
+model Opere {
+  id              Int             @id @default(autoincrement())
+  descrizione     String
+  settimanali     Settimanale[]
+}
+
+model Qualifica {
+  id              Int             @id @default(autoincrement())
+  descrizione     String
+  dipendenti      Dipendenti[]
+}
+
+model Settimanale {
+  id               Int             @id @default(autoincrement())
+  data_settimanale String
+  utente_id        Int
+  luogo_di_nascita String
+  data_di_nascita  DateTime        @db.Date
+  tipo_proprieta   Int
+  proprieta        String          @db.VarChar(255)
+  impresa_id       Int
+  opera_id         Int
+  mezzo_id         Int?
+  autovettura_id   Int
+  matricola        String?         @db.VarChar(50)
+  targa            String          @db.VarChar(50)
+  utente           Utenti          @relation(fields: [utente_id], references: [id])
+  impresa          Imprese         @relation(fields: [impresa_id], references: [id])
+  opera            Opere           @relation(fields: [opera_id], references: [id])
+  autovettura      Autovetture     @relation("Autovetture_Settimanale", fields: [autovettura_id], references: [id])
+  tipo             TipiProprieta   @relation(fields: [tipo_proprieta], references: [id])
+  mezzo            Mezzi?          @relation("Mezzi_Settimanale", fields: [mezzo_id], references: [id])
+}
+
+model TipiProprieta {
+  id              Int             @id @default(autoincrement())
+  descrizione     String
+  autovetture     Autovetture[]
+  mezzi           Mezzi[]
+  settimanali     Settimanale[]
+}
+
+model Utenti {
+  id              Int             @id @default(autoincrement())
+  username        String          @unique @db.VarChar(50)
+  password        String          @db.VarChar(255)
+  nome            String?          @db.VarChar(255)
+  cognome         String?          @db.VarChar(255)
+  impresa_id      Int?
+  utente          String?          @db.VarChar(255)
+  autorizzazione  Boolean?
+  primo_login     Boolean?
+  super_utente    Boolean?
+  impresa         Imprese?         @relation(fields: [impresa_id], references: [id])
+  settimanali     Settimanale[]
+  imprese_associate ImpreseAssociateUtenti[]
+}

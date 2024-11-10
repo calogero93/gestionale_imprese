@@ -1,23 +1,13 @@
-[package]
-name = "gestionale_imprese"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = ["crates/backend", "crates/prisma", "crates/prisma-cli"]
+resolver = "2"
+exclude = ["index.node"]
 
-[dependencies]
-axum = { version= "0.6.18", features = [ "json", "macros" ] }
-hyper = { version = "0.14", features = ["full"] }
-tokio = { version = "1", features = ["full"] }
-diesel = { version = "2.2.0", features = ["postgres", "r2d2", "chrono"] }
+[workspace.dependencies]
+prisma-client-rust = { git = "https://github.com/Brendonovich/prisma-client-rust", tag = "0.6.11", default-features = false, features = [
+  "postgresql",
+  "tokio",
+  "migrations",
+] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tower = "0.4"
-tower-http = "0.5.2"
-dotenvy = "0.15"
-uuid = { version = "1.8.0", features = ["v4", "fast-rng", "macro-diagnostics"] }
-axum-extra = { version = "0.9.3", features = ["typed-header", "cookie"] }
-axum-sessions = "0.5.0"
-anyhow = "1.0.71"
-async-redis-session = { git = "https://github.com/ttys3/async-redis-session.git", rev = "25fe06c"}
-redis = { version = "0.23.0", features = ["tokio-comp", "json"] }
-deadpool-diesel = { version = "0.4.1", features = ["postgres"] }
-diesel-dynamic-schema = "0.2.2"

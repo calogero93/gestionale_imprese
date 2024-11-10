@@ -144,3 +144,19 @@ pub struct GetAutovettureQuery {
 pub struct GetAutovetturaQuery {
     pub id: i32,
 }
+
+#[derive(Deserialize)]
+pub struct GetSettimanaleQuery {
+    pub data_settimanale: Option<String>,
+    pub utente_id: Option<i32>,
+    pub luogo_di_nascita: Option<String>,
+    pub data_di_nascita: Option<String>,
+    pub tipo_proprieta: Option<i32>,
+    pub proprieta: Option<String>,
+    pub impresa_id: Option<i32>,
+    pub opera_id: Option<i32>,
+    pub mezzo_id: Option<i32>,
+    pub autovettura_id: Option<i32>,
+    pub matricola: Option<String>,
+    pub targa: Option<String>,
+}

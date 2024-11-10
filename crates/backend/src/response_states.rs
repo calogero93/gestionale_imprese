@@ -3,8 +3,9 @@ use serde::Serialize;
 #[derive(Serialize)]
 pub struct LoginResponse {
     pub message: String,
-    pub auth: bool,
-    pub first_login: bool
+    pub token: String,
+    pub auth: Option<bool>,
+    pub first_login: Option<bool>
 }
 
 
